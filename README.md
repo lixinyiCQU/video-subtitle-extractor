@@ -69,6 +69,18 @@ os.environ['HF_HUB_CACHE'] = '/content/drive/MyDrive/hf_cache/hub'
 
 Free Colab temporary disk is usually enough for `tiny`, `base`, and `small`. Larger models such as `medium` or `large-v3` use more disk and bandwidth; Drive caching avoids re-downloading them across sessions, but if Drive space is tight, you can skip Drive and let Colab download models into temporary storage each session.
 
+### Cloud ASR With Local Audio
+
+YouTube may block Colab/cloud IPs from downloading audio even when the same cookies work locally. In that case, download the audio on your local machine and use the Gradio `Uploaded Audio` tab for GPU transcription.
+
+Local audio download example:
+
+```powershell
+python -m yt_dlp -x --audio-format mp3 --cookies www.youtube.com_cookies.txt -o "%(title).200B.%(ext)s" "https://www.youtube.com/watch?v=VIDEO_ID"
+```
+
+Then upload the generated audio file in the Colab Gradio UI and choose the ASR model/device. This avoids YouTube access from Colab entirely; Colab only receives the audio file you upload and runs faster-whisper transcription.
+
 ## Project Layout
 
 ```text
