@@ -1,17 +1,17 @@
 [project]
 name = "video-subtitle-extractor"
-version = "1.5.0"
+version = "1.5.1"
 description = "Local FastAPI web app for extracting Bilibili and YouTube subtitles as AI Agent context."
 readme = "README.md"
 requires-python = ">=3.11"
 dependencies = [
-  "fastapi==0.115.6",
+  "fastapi>=0.133,<1",
   "httpx==0.28.1",
   "python-multipart==0.0.20",
   "uvicorn[standard]==0.34.0",
   "yt-dlp>=2026.6.9",
   "faster-whisper>=1.1.1",
-  "gradio>=5.0.0,<6.0.0",
+  "gradio>=6.0.0,<7.0.0",
 ]
 
 [project.optional-dependencies]

@@ -49,11 +49,13 @@ In Colab, choose `Runtime > Change runtime type > GPU`, then run:
 !rm -rf /content/video-subtitle-extractor
 !git clone https://github.com/lixinyiCQU/video-subtitle-extractor.git /content/video-subtitle-extractor
 %cd /content/video-subtitle-extractor
-!python -m pip install -r requirements.txt
+!python -m pip install --upgrade -r requirements.txt
 !python gradio_app.py --share --server-name 0.0.0.0 --server-port 7860
 ```
 
 Gradio will print a public URL. Open that URL and use the UI entirely in the cloud runtime.
+
+Colab preinstalls several Google packages. The project intentionally uses modern FastAPI/Starlette-compatible dependency ranges, so `--upgrade` is recommended to let pip converge on versions that work with Colab's preinstalled `google-adk`, `google-genai`, and Gradio packages.
 
 Optional Google Drive model cache:
 

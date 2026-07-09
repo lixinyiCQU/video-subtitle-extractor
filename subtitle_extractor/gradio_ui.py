@@ -117,7 +117,7 @@ def build_demo() -> Any:
         suppress_hf_warnings: bool,
         cookie_text: str,
         cookie_file: str | None,
-        progress: gr.Progress = gr.Progress(track_tqdm=False),
+        progress=gr.Progress(track_tqdm=False),
     ) -> tuple[str, str, str, str]:
         return extract_with_progress(
             platform,
