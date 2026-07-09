@@ -39,6 +39,7 @@ class ExtractRequest:
     browser: str
     enable_asr: bool = True
     asr_model: str = "base"
+    asr_device: str = "auto"
     hf_token: str | None = None
     suppress_hf_warnings: bool = True
     cookie_text: str | None = None

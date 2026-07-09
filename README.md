@@ -1,8 +1,8 @@
 # Video Subtitle Extractor
 
-A local web application for extracting subtitles from Bilibili and YouTube videos, then formatting the result as clean AI Agent context.
+A local or cloud GPU web application for extracting subtitles from Bilibili and YouTube videos, then formatting the result as clean AI Agent context.
 
-The backend uses `yt-dlp` for open-source video metadata and subtitle extraction. The frontend is a lightweight static UI served by FastAPI.
+The backend uses `yt-dlp` for open-source video metadata and subtitle extraction. The project provides both a local FastAPI UI and a cloud-friendly Gradio UI for Colab or other GPU servers.
 
 ## Features
 
@@ -13,8 +13,9 @@ The backend uses `yt-dlp` for open-source video metadata and subtitle extraction
 - Cookie support through browser cookies, raw `Cookie:` headers, or Netscape `cookies.txt`
 - Subtitle cleanup, deduplication, and timestamp normalization
 - Markdown output designed for AI Agent context
+- Gradio cloud UI for Google Colab or other GPU runtimes
 
-## Quick Start
+## Local FastAPI UI
 
 ```powershell
 python -m pip install -r requirements.txt
@@ -27,11 +28,52 @@ Open:
 http://127.0.0.1:8000
 ```
 
+## Gradio UI
+
+```powershell
+python -m pip install -r requirements.txt
+python gradio_app.py --server-name 127.0.0.1 --server-port 7860
+```
+
+Open:
+
+```text
+http://127.0.0.1:7860
+```
+
+## Google Colab GPU Mode
+
+In Colab, choose `Runtime > Change runtime type > GPU`, then run:
+
+```python
+!rm -rf /content/video-subtitle-extractor
+!git clone https://github.com/lixinyiCQU/video-subtitle-extractor.git /content/video-subtitle-extractor
+%cd /content/video-subtitle-extractor
+!python -m pip install -r requirements.txt
+!python gradio_app.py --share --server-name 0.0.0.0 --server-port 7860
+```
+
+Gradio will print a public URL. Open that URL and use the UI entirely in the cloud runtime.
+
+Optional Google Drive model cache:
+
+```python
+from google.colab import drive
+drive.mount('/content/drive')
+import os
+os.environ['HF_HOME'] = '/content/drive/MyDrive/hf_cache'
+os.environ['HF_HUB_CACHE'] = '/content/drive/MyDrive/hf_cache/hub'
+```
+
+Free Colab temporary disk is usually enough for `tiny`, `base`, and `small`. Larger models such as `medium` or `large-v3` use more disk and bandwidth; Drive caching avoids re-downloading them across sessions, but if Drive space is tight, you can skip Drive and let Colab download models into temporary storage each session.
+
 ## Project Layout
 
 ```text
 .
 |-- app.py                         # Compatibility ASGI entrypoint
+|-- gradio_app.py                  # Gradio cloud UI entrypoint
+|-- colab/                         # Colab launcher notebook
 |-- subtitle_extractor/            # Backend application package
 |   |-- web.py                     # FastAPI app and HTTP routes
 |   |-- service.py                 # Use-case orchestration
@@ -65,6 +107,8 @@ Supported cookie inputs:
 
 Cookies are only written to a temporary file for the current request. Do not commit real cookies to version control.
 
+In Colab mode, pasted or uploaded cookies live in the Colab runtime for the current request. They are not saved by the app unless you manually save them to Drive.
+
 For YouTube, some videos may show `Sign in to confirm you're not a bot` or `Requested format is not available`. In practice, both usually mean YouTube did not expose downloadable formats to the anonymous request. Log in to YouTube and provide browser cookies or a YouTube `cookies.txt` file.
 
 The app enables Node.js as the `yt-dlp` JavaScript runtime for YouTube and allows the recommended `ejs:github` challenge solver component. This helps `yt-dlp` recover formats that YouTube hides behind JavaScript challenges.
@@ -81,7 +125,7 @@ The UI enables this fallback by default. Available models:
 - `medium`: much slower
 - `large-v3`: best quality, slowest and most resource intensive
 
-The first run downloads the selected model. CPU transcription works with `compute_type=int8`; long videos can still take time.
+The first run downloads the selected model. Local CPU transcription uses `int8`; cloud GPU transcription uses CUDA with `float16` when available.
 
 ### HuggingFace Options
 

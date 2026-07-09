@@ -5,7 +5,7 @@ from contextlib import contextmanager
 from pathlib import Path
 from typing import Callable, Iterator
 
-from .config import ASR_SUPPORTED_MODELS, DEFAULT_ASR_MODEL
+from .config import ASR_SUPPORTED_DEVICES, ASR_SUPPORTED_MODELS, DEFAULT_ASR_DEVICE, DEFAULT_ASR_MODEL
 from .errors import AppError
 from .models import Segment
 
@@ -15,6 +15,33 @@ def normalize_asr_model(model_name: str | None) -> str:
     if value not in ASR_SUPPORTED_MODELS:
         raise AppError(f"Unsupported ASR model '{value}'. Supported models: {', '.join(ASR_SUPPORTED_MODELS)}")
     return value
+
+
+def normalize_asr_device(device_name: str | None) -> str:
+    value = (device_name or DEFAULT_ASR_DEVICE).strip().lower()
+    if value not in ASR_SUPPORTED_DEVICES:
+        raise AppError(f"Unsupported ASR device '{value}'. Supported devices: {', '.join(ASR_SUPPORTED_DEVICES)}")
+    return value
+
+
+def cuda_is_available() -> bool:
+    try:
+        import torch
+
+        return bool(torch.cuda.is_available())
+    except Exception:
+        return False
+
+
+def resolve_asr_runtime(device_name: str | None) -> tuple[str, str]:
+    requested = normalize_asr_device(device_name)
+    if requested == "cuda":
+        if not cuda_is_available():
+            raise AppError("CUDA was requested, but no CUDA GPU is available in this runtime.", status_code=422)
+        return "cuda", "float16"
+    if requested == "auto" and cuda_is_available():
+        return "cuda", "float16"
+    return "cpu", "int8"
 
 
 def language_for_asr(language: str | None) -> str | None:
@@ -58,11 +85,13 @@ def transcribe_audio(
     audio_path: str | Path,
     language: str | None,
     model_name: str | None,
+    device_name: str | None = None,
     hf_token: str | None = None,
     suppress_hf_warnings: bool = True,
     progress: ProgressCallback | None = None,
 ) -> list[Segment]:
     model_key = normalize_asr_model(model_name)
+    device, compute_type = resolve_asr_runtime(device_name)
     with huggingface_environment(hf_token, suppress_hf_warnings):
         try:
             from faster_whisper import WhisperModel
@@ -73,8 +102,8 @@ def transcribe_audio(
             ) from exc
 
         if progress:
-            progress(f"Loading faster-whisper model '{model_key}'", 65)
-        model = WhisperModel(model_key, device="cpu", compute_type="int8")
+            progress(f"Loading faster-whisper model '{model_key}' on {device}", 65)
+        model = WhisperModel(model_key, device=device, compute_type=compute_type)
         if progress:
             progress("Transcribing audio with faster-whisper", 75)
         segments, _info = model.transcribe(

@@ -68,6 +68,14 @@
                   <option value="large-v3">large-v3 - best, slowest</option>
                 </select>
               </label>
+              <label class="field model-field">
+                <span>ASR Device</span>
+                <select id="asrDevice" name="asr_device">
+                  <option value="auto" selected>auto - GPU when available</option>
+                  <option value="cuda">cuda - require GPU</option>
+                  <option value="cpu">cpu - local fallback</option>
+                </select>
+              </label>
             </div>
             <div class="hf-config">
               <label class="field">

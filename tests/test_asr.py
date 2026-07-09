@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import unittest
 
-from subtitle_extractor.asr import language_for_asr, normalize_asr_model
+from subtitle_extractor.asr import language_for_asr, normalize_asr_device, normalize_asr_model, resolve_asr_runtime
 from subtitle_extractor.errors import AppError
 
 
@@ -17,6 +17,15 @@ class AsrTests(unittest.TestCase):
         self.assertEqual(normalize_asr_model("base"), "base")
         with self.assertRaises(AppError):
             normalize_asr_model("not-a-model")
+
+    def test_device_validation(self) -> None:
+        self.assertEqual(normalize_asr_device("AUTO"), "auto")
+        self.assertEqual(normalize_asr_device("cpu"), "cpu")
+        with self.assertRaises(AppError):
+            normalize_asr_device("mps")
+
+    def test_cpu_runtime(self) -> None:
+        self.assertEqual(resolve_asr_runtime("cpu"), ("cpu", "int8"))
 
 
 if __name__ == "__main__":

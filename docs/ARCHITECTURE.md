@@ -5,6 +5,7 @@ The application is intentionally split into small, platform-aware modules while 
 ## Layers
 
 - `web.py`: FastAPI construction, route definitions, multipart form handling, and error mapping.
+- `gradio_ui.py`: Cloud-friendly Gradio interface for Colab and GPU servers.
 - `service.py`: Application use case. It validates inputs, invokes extraction, parses subtitles, and shapes the response.
 - `jobs.py`: In-memory background job runner used by the frontend progress UI.
 - `ytdlp_client.py`: Integration boundary for `yt-dlp`, including subtitle track collection and preference rules.
@@ -26,6 +27,13 @@ To add a new platform:
 5. Add one or more tests in `tests/`.
 
 The frontend sends a generic `platform` field, so additional platforms can share the same endpoint.
+
+## UI Entrypoints
+
+- `app.py` launches the local FastAPI/static UI.
+- `gradio_app.py` launches a Gradio UI designed for Colab and other cloud GPU runtimes.
+
+Both entrypoints use the same `service.py` extraction pipeline.
 
 For YouTube, `ytdlp_client.py` enables Node.js as a JavaScript runtime and allows `remote_components={"ejs:github"}` so `yt-dlp` can solve current YouTube JavaScript challenges when needed.
 

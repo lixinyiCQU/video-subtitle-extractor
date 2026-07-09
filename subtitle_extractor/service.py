@@ -55,6 +55,7 @@ def extract_subtitle_context(
                     audio_path,
                     request.language,
                     request.asr_model,
+                    device_name=request.asr_device,
                     hf_token=request.hf_token,
                     suppress_hf_warnings=request.suppress_hf_warnings,
                     progress=progress,
