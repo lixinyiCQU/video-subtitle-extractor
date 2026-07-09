@@ -164,8 +164,8 @@ def build_demo() -> Any:
         run = gr.Button("Extract", variant="primary")
         error = gr.Textbox(label="Error", interactive=False)
         metadata = gr.Textbox(label="Metadata", lines=8, interactive=False)
-        ai_context = gr.Textbox(label="AI Agent Context", lines=18, show_copy_button=True)
-        plain_text = gr.Textbox(label="Clean Transcript", lines=12, show_copy_button=True)
+        ai_context = gr.Textbox(label="AI Agent Context", lines=18)
+        plain_text = gr.Textbox(label="Clean Transcript", lines=12)
 
         run.click(
             run_with_progress,
