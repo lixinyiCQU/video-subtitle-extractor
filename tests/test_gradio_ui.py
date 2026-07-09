@@ -14,6 +14,12 @@ class GradioUiTests(unittest.TestCase):
         self.assertEqual(cookie_input.header, "SID=abc; X=1")
         self.assertIsNone(cookie_input.path)
 
+    def test_extension_exported_cookie_pairs_are_treated_as_header(self) -> None:
+        cookie_input = build_cookie_input("SID=abc; HSID=def; VISITOR_INFO1_LIVE=ghi", None)
+
+        self.assertEqual(cookie_input.header, "SID=abc; HSID=def; VISITOR_INFO1_LIVE=ghi")
+        self.assertIsNone(cookie_input.path)
+
     def test_netscape_cookie_text_uses_temp_file(self) -> None:
         raw = "# Netscape HTTP Cookie File\n.example.com\tTRUE\t/\tFALSE\t0\tSID\tabc"
         cookie_input = build_cookie_input(raw, None)

@@ -45,6 +45,7 @@ def ydl_options(
         "subtitlesformat": SUBTITLE_FORMATS,
         "http_headers": headers,
         "logger": QuietYtdlpLogger(),
+        "ignore_no_formats_error": True,
     }
     if cookie_path:
         opts["cookiefile"] = cookie_path

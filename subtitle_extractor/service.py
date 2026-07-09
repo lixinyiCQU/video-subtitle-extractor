@@ -123,8 +123,8 @@ def map_download_error(exc: DownloadError, platform: str):
     if platform == "youtube" and "Requested format is not available" in message:
         return AppError(
             "YouTube did not expose a downloadable audio/video format for this request. "
-            "This is often caused by anti-bot checks or missing YouTube cookies. "
-            "Log in to YouTube and provide browser cookies or upload a YouTube cookies.txt file.",
+            "The app can still extract existing subtitle tracks when YouTube exposes them, but ASR needs audio download. "
+            "On Colab/cloud IPs this can still be caused by YouTube anti-bot checks even with cookies.",
             status_code=502,
         )
     if "Could not copy Chrome cookie database" in message:

@@ -4,7 +4,7 @@ import unittest
 
 from subtitle_extractor.errors import AppError
 from subtitle_extractor.validation import ensure_supported_url, normalize_platform
-from subtitle_extractor.ytdlp_client import choose_track, collect_tracks
+from subtitle_extractor.ytdlp_client import choose_track, collect_tracks, ydl_options
 
 
 class ValidationAndTrackTests(unittest.TestCase):
@@ -37,6 +37,11 @@ class ValidationAndTrackTests(unittest.TestCase):
         self.assertEqual(len(tracks), 2)
         self.assertEqual(selected["language"], "zh-Hans")
         self.assertEqual(selected["ext"], "srt")
+
+    def test_metadata_options_ignore_missing_formats(self) -> None:
+        options = ydl_options(platform="youtube")
+
+        self.assertTrue(options["ignore_no_formats_error"])
 
 
 if __name__ == "__main__":

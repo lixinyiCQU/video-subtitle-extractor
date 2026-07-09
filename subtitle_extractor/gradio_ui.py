@@ -1,10 +1,9 @@
 from __future__ import annotations
 
-import tempfile
 from pathlib import Path
 from typing import Any
 
-from .cookies import normalize_cookie_header
+from .cookies import prepare_cookie_text
 from .errors import AppError
 from .models import CookieInput, ExtractRequest
 from .service import extract_subtitle_context
@@ -30,17 +29,11 @@ def runtime_summary() -> str:
 
 def build_cookie_input(cookie_text: str | None, cookie_file_path: str | None) -> CookieInput:
     raw = (cookie_text or "").strip()
+    from_upload = False
     if cookie_file_path:
         raw = Path(cookie_file_path).read_text(encoding="utf-8", errors="ignore").strip()
-    if not raw:
-        return CookieInput()
-    if raw.lower().startswith("cookie:") or ("\t" not in raw and "=" in raw.splitlines()[0]):
-        return CookieInput(header=normalize_cookie_header(raw))
-    temp_file = tempfile.NamedTemporaryFile("w", suffix=".txt", encoding="utf-8", delete=False)
-    temp_file.write(raw)
-    temp_file.flush()
-    temp_file.close()
-    return CookieInput(temp_file=temp_file)
+        from_upload = True
+    return prepare_cookie_text(raw, from_upload=from_upload)
 
 
 def format_metadata(data: dict[str, Any]) -> str:
