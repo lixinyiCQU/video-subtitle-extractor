@@ -1,0 +1,161 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Video Subtitle Extractor</title>
+    <link rel="stylesheet" href="/static/styles.css" />
+  </head>
+  <body>
+    <main class="shell">
+      <section class="workspace">
+        <header class="topbar">
+          <div>
+            <p class="eyebrow">Open-source subtitle workflow</p>
+            <h1>Video Subtitle Extractor</h1>
+          </div>
+          <div class="status-pill" id="statusPill">Ready</div>
+        </header>
+
+        <form class="extractor" id="extractForm">
+          <label class="field platform-field">
+            <span>Platform</span>
+            <select id="platform" name="platform">
+              <option value="bilibili">Bilibili</option>
+              <option value="youtube">YouTube</option>
+            </select>
+          </label>
+
+          <label class="field url-field">
+            <span>Video URL</span>
+            <input id="videoUrl" name="url" type="url" placeholder="https://www.bilibili.com/video/BV..." autocomplete="off" required />
+          </label>
+
+          <label class="field compact-field">
+            <span>Subtitle Language</span>
+            <select id="language" name="language">
+              <option value="auto">Auto preferred</option>
+              <option value="zh-Hans">Chinese Simplified</option>
+              <option value="zh-Hant">Chinese Traditional</option>
+              <option value="zh">Chinese</option>
+              <option value="en">English</option>
+              <option value="ja">Japanese</option>
+            </select>
+          </label>
+
+          <button class="primary" type="submit">
+            <span class="button-icon">v</span>
+            Extract
+          </button>
+
+          <div class="asr-box">
+            <div class="asr-copy">
+              <p class="label">Audio ASR Fallback</p>
+              <label class="check-field">
+                <input id="enableAsr" type="checkbox" checked />
+                <input id="enableAsrValue" name="enable_asr" type="hidden" value="true" />
+                <span>Transcribe audio when the video has no subtitle track</span>
+              </label>
+            </div>
+            <div class="asr-controls">
+              <label class="field model-field">
+                <span>ASR Model</span>
+                <select id="asrModel" name="asr_model">
+                  <option value="tiny">tiny - fastest</option>
+                  <option value="base" selected>base - balanced</option>
+                  <option value="small">small - better</option>
+                  <option value="medium">medium - slower</option>
+                  <option value="large-v3">large-v3 - best, slowest</option>
+                </select>
+              </label>
+            </div>
+            <div class="hf-config">
+              <label class="field">
+                <span>HF Token (optional)</span>
+                <input id="hfToken" name="hf_token" type="password" placeholder="hf_... for faster model downloads" autocomplete="off" />
+              </label>
+              <label class="check-field">
+                <input id="suppressHfWarnings" type="checkbox" checked />
+                <input id="suppressHfWarningsValue" name="suppress_hf_warnings" type="hidden" value="true" />
+                <span>Hide Windows symlink cache warning</span>
+              </label>
+            </div>
+          </div>
+
+          <section class="progress-panel" id="progressPanel" hidden>
+            <div class="progress-head">
+              <span id="progressLabel">Queued</span>
+              <strong id="progressPercent">0%</strong>
+            </div>
+            <div class="progress-track">
+              <div class="progress-bar" id="progressBar"></div>
+            </div>
+          </section>
+
+          <details class="cookie-box">
+            <summary>Provide cookies for restricted, logged-in, age-gated, YouTube bot-check, or anti-bot-blocked videos</summary>
+            <div class="cookie-grid">
+              <label class="field">
+                <span>Read from browser</span>
+                <select id="browser" name="browser">
+                  <option value="none">Do not read</option>
+                  <option value="edge">Microsoft Edge</option>
+                  <option value="chrome">Google Chrome</option>
+                  <option value="firefox">Firefox</option>
+                </select>
+              </label>
+              <label class="field">
+                <span>Paste Cookie header or cookies.txt</span>
+                <textarea id="cookieText" name="cookie_text" rows="6" placeholder="Cookie: SESSDATA=...; bili_jct=...&#10;Cookie: VISITOR_INFO1_LIVE=...; SID=...&#10;&#10;Or paste Netscape cookies.txt content"></textarea>
+              </label>
+              <label class="field file-field">
+                <span>Upload cookies.txt</span>
+                <input id="cookieFile" name="cookie_file" type="file" accept=".txt" />
+              </label>
+            </div>
+          </details>
+        </form>
+
+        <section class="result-grid" id="results" hidden>
+          <div class="panel output-panel">
+            <div class="panel-head">
+              <div>
+                <p class="label">AI Agent Context</p>
+                <h2 id="videoTitle">Subtitle Context</h2>
+              </div>
+              <div class="actions">
+                <button class="ghost" type="button" data-copy="contextOutput">Copy</button>
+                <button class="ghost" type="button" id="downloadMarkdown">Download .md</button>
+              </div>
+            </div>
+            <textarea id="contextOutput" spellcheck="false"></textarea>
+          </div>
+
+          <aside class="panel side-panel">
+            <div class="meta-block">
+                <p class="label">Video Info</p>
+              <dl id="videoMeta"></dl>
+            </div>
+            <div class="meta-block">
+              <p class="label">Available Tracks</p>
+              <div class="track-list" id="trackList"></div>
+            </div>
+          </aside>
+        </section>
+
+        <section class="panel timeline-panel" id="timelinePanel" hidden>
+          <div class="panel-head">
+            <div>
+              <p class="label">Timeline</p>
+              <h2>Timestamped Transcript</h2>
+            </div>
+            <button class="ghost" type="button" data-copy="plainOutput">Copy Plain Text</button>
+          </div>
+          <textarea id="plainOutput" spellcheck="false" hidden></textarea>
+          <div class="timeline" id="timeline"></div>
+        </section>
+      </section>
+    </main>
+    <script src="/static/app.js"></script>
+  </body>
+</html>
