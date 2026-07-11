@@ -1,9 +1,14 @@
 from __future__ import annotations
 
+import shutil
+import tempfile
+
+from starlette.background import BackgroundTask
 from fastapi import FastAPI, File, Form, HTTPException, Request, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, Response
 from fastapi.staticfiles import StaticFiles
+from yt_dlp.utils import DownloadError
 
 from .config import (
     APP_TITLE,
@@ -21,7 +26,9 @@ from .cookies import prepare_cookie_input
 from .errors import AppError
 from .jobs import create_extract_job, get_job, job_to_dict
 from .models import ExtractRequest
-from .service import extract_subtitle_context
+from .service import extract_subtitle_context, map_download_error
+from .validation import browser_cookie_spec, ensure_supported_url, normalize_platform
+from .ytdlp_client import download_audio
 
 
 def create_app() -> FastAPI:
@@ -115,6 +122,44 @@ def create_app() -> FastAPI:
         )
         job = create_extract_job(request, cookie_input)
         return job_to_dict(job)
+
+    @application.post("/api/audio/download")
+    async def download_audio_file(
+        url: str = Form(...),
+        platform: str = Form(DEFAULT_PLATFORM),
+        browser: str = Form(DEFAULT_BROWSER),
+        cookie_text: str | None = Form(None),
+        cookie_file: UploadFile | None = File(None),
+    ) -> FileResponse:
+        cookie_input = prepare_cookie_input(cookie_text, cookie_file)
+        temp_dir = tempfile.mkdtemp(prefix="subtitle-audio-download-")
+        try:
+            normalized_platform = normalize_platform(platform)
+            video_url = ensure_supported_url(url, normalized_platform)
+            browser_cookies = browser_cookie_spec(browser)
+            audio_path = download_audio(
+                video_url,
+                normalized_platform,
+                cookie_input.path,
+                browser_cookies,
+                cookie_input.header,
+                temp_dir,
+            )
+            return FileResponse(
+                audio_path,
+                media_type="application/octet-stream",
+                filename=audio_path.name,
+                background=BackgroundTask(shutil.rmtree, temp_dir, ignore_errors=True),
+            )
+        except AppError as exc:
+            shutil.rmtree(temp_dir, ignore_errors=True)
+            raise HTTPException(status_code=exc.status_code, detail=exc.message) from exc
+        except DownloadError as exc:
+            shutil.rmtree(temp_dir, ignore_errors=True)
+            mapped = map_download_error(exc, normalized_platform)
+            raise HTTPException(status_code=mapped.status_code, detail=mapped.message) from exc
+        finally:
+            cookie_input.cleanup()
 
     @application.get("/api/jobs/{job_id}")
     def read_job(job_id: str) -> dict:

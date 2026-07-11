@@ -115,7 +115,7 @@ h2 {
 
 .extractor {
   display: grid;
-  grid-template-columns: minmax(132px, 170px) minmax(260px, 1fr) minmax(150px, 190px) minmax(132px, 160px);
+  grid-template-columns: minmax(132px, 170px) minmax(260px, 1fr) minmax(150px, 190px) minmax(260px, 320px);
   gap: 12px;
   padding: 14px;
   align-items: end;
@@ -184,6 +184,12 @@ textarea:focus {
 
 .primary:hover {
   background: var(--accent-dark);
+}
+
+.command-row {
+  display: grid;
+  grid-template-columns: minmax(110px, 1fr) minmax(132px, 1fr);
+  gap: 8px;
 }
 
 .button-icon {
@@ -453,6 +459,10 @@ dd {
   .hf-config,
   .cookie-grid,
   .result-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .command-row {
     grid-template-columns: 1fr;
   }
 

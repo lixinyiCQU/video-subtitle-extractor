@@ -81,6 +81,8 @@ python -m yt_dlp -x --audio-format mp3 --cookies www.youtube.com_cookies.txt -o 
 
 Then upload the generated audio file in the Colab Gradio UI and choose the ASR model/device. This avoids YouTube access from Colab entirely; Colab only receives the audio file you upload and runs faster-whisper transcription.
 
+The local FastAPI UI also includes a `Download Audio` button next to `Extract`. It uses the same URL, platform, browser cookie, pasted cookie, and uploaded `cookies.txt` fields, then downloads the audio file directly from your local machine.
+
 ## Project Layout
 
 ```text

@@ -19,6 +19,7 @@ const videoMeta = document.querySelector("#videoMeta");
 const trackList = document.querySelector("#trackList");
 const timeline = document.querySelector("#timeline");
 const downloadMarkdown = document.querySelector("#downloadMarkdown");
+const downloadAudio = document.querySelector("#downloadAudio");
 const submitButton = form.querySelector("button[type='submit']");
 
 let lastMarkdown = "";
@@ -159,6 +160,52 @@ form.addEventListener("submit", async (event) => {
     setProgress(error.message, 100);
     window.alert(error.message);
   } finally {
+    submitButton.disabled = false;
+  }
+});
+
+downloadAudio.addEventListener("click", async () => {
+  setStatus("Downloading", "loading");
+  setProgress("Downloading audio locally", 20);
+  downloadAudio.disabled = true;
+  submitButton.disabled = true;
+
+  const payload = new FormData(form);
+  try {
+    const response = await fetch("/api/audio/download", {
+      method: "POST",
+      body: payload,
+    });
+    if (!response.ok) {
+      let message = "Audio download failed";
+      try {
+        const error = await response.json();
+        message = error.detail || message;
+      } catch {
+        message = await response.text();
+      }
+      throw new Error(message);
+    }
+
+    const blob = await response.blob();
+    const disposition = response.headers.get("content-disposition") || "";
+    const match = disposition.match(/filename\*?=(?:UTF-8''|\"?)([^\";]+)/i);
+    const fallbackName = `${platformSelect.value || "video"}-audio`;
+    const filename = match ? decodeURIComponent(match[1].replaceAll('"', "")) : fallbackName;
+    const url = URL.createObjectURL(blob);
+    const anchor = document.createElement("a");
+    anchor.href = url;
+    anchor.download = filename;
+    anchor.click();
+    URL.revokeObjectURL(url);
+    setStatus("Done");
+    setProgress("Audio downloaded", 100);
+  } catch (error) {
+    setStatus("Failed", "error");
+    setProgress(error.message, 100);
+    window.alert(error.message);
+  } finally {
+    downloadAudio.disabled = false;
     submitButton.disabled = false;
   }
 });
