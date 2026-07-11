@@ -23,6 +23,7 @@ env/
 *cookies*.txt
 Cookie*.txt
 www.*_cookies.txt
+token.txt
 
 # Editor and OS noise
 .idea/

@@ -5,3 +5,4 @@ uvicorn[standard]==0.34.0
 yt-dlp>=2026.6.9
 faster-whisper>=1.1.1
 gradio>=6.0.0,<7.0.0
+pickleshare>=0.7.5

@@ -1,7 +1,10 @@
 from __future__ import annotations
 
+import queue
+import threading
+import time
 from pathlib import Path
-from typing import Any
+from typing import Any, Callable, Iterator
 
 from .asr import transcribe_audio
 from .cookies import prepare_cookie_text
@@ -16,6 +19,17 @@ PLATFORM_CHOICES = ["bilibili", "youtube"]
 LANGUAGE_CHOICES = ["auto", "zh-Hans", "zh-Hant", "zh", "en", "ja"]
 MODEL_CHOICES = ["tiny", "base", "small", "medium", "large-v3"]
 DEVICE_CHOICES = ["auto", "cuda", "cpu"]
+StreamOutput = tuple[str, str, str, str, str]
+WorkResult = tuple[str, str, str, str]
+ProgressCallback = Callable[[str, int], None]
+
+
+class ProgressAdapter:
+    def __init__(self, callback: ProgressCallback) -> None:
+        self.callback = callback
+
+    def __call__(self, value: float, desc: str | None = None) -> None:
+        self.callback(desc or "Working", int(float(value or 0) * 100))
 
 
 def runtime_summary() -> str:
@@ -89,8 +103,73 @@ def build_uploaded_audio_context(
     return metadata, ai_context, plain_text
 
 
+def resolve_audio_source(audio_file: str | None, server_audio_path: str | None) -> str:
+    if audio_file:
+        return audio_file
+    value = (server_audio_path or "").strip()
+    if not value:
+        raise AppError("Upload an audio file or provide an audio file path on the server.", status_code=422)
+    path = Path(value).expanduser()
+    if not path.exists() or not path.is_file():
+        raise AppError(f"Server audio file was not found: {path}", status_code=422)
+    return str(path)
+
+
+def stream_status(worker: Callable[[ProgressCallback], WorkResult], start_message: str) -> Iterator[StreamOutput]:
+    events: queue.Queue[tuple[str, int] | WorkResult] = queue.Queue()
+    status_lines = [f"0% - {start_message}"]
+    latest_status = "\n".join(status_lines)
+    latest_payload: StreamOutput = (latest_status, "", "", "", "")
+    started_at = time.monotonic()
+
+    def progress(message: str, percent: int) -> None:
+        events.put((message, percent))
+
+    def run_worker() -> None:
+        try:
+            events.put(worker(progress))
+        except AppError as exc:
+            events.put(("", "", "", exc.message))
+        except Exception as exc:
+            events.put(("", "", "", str(exc)))
+
+    thread = threading.Thread(target=run_worker, daemon=True)
+    thread.start()
+    yield latest_payload
+
+    while thread.is_alive() or not events.empty():
+        try:
+            event = events.get(timeout=1)
+        except queue.Empty:
+            elapsed = int(time.monotonic() - started_at)
+            heartbeat = f"{status_lines[-1]}\nRunning for {elapsed}s"
+            latest_payload = (heartbeat, *latest_payload[1:])
+            yield latest_payload
+            continue
+
+        if len(event) == 2 and isinstance(event[1], int):
+            message, percent = event
+            percent = max(0, min(100, int(percent)))
+            line = f"{percent}% - {message}"
+            if not status_lines or status_lines[-1] != line:
+                status_lines.append(line)
+            latest_status = "\n".join(status_lines[-12:])
+            latest_payload = (latest_status, *latest_payload[1:])
+            yield latest_payload
+        else:
+            metadata, ai_context, plain_text, error = event
+            if error:
+                status_lines.append(f"Failed - {error}")
+            else:
+                status_lines.append("100% - Done")
+            latest_status = "\n".join(status_lines[-12:])
+            latest_payload = (latest_status, metadata, ai_context, plain_text, error)
+            yield latest_payload
+
+
 def transcribe_uploaded_audio(
     audio_file: str | None,
+    server_audio_path: str | None,
     language: str,
     asr_model: str,
     asr_device: str,
@@ -98,17 +177,15 @@ def transcribe_uploaded_audio(
     suppress_hf_warnings: bool,
     progress: Any = None,
 ) -> tuple[str, str, str, str]:
-    if not audio_file:
-        return "", "", "", "Upload an audio file first."
-
     def report(message: str, percent: int) -> None:
         if progress:
             progress(percent / 100, desc=message)
 
     try:
+        audio_path = resolve_audio_source(audio_file, server_audio_path)
         report("Preparing uploaded audio", 10)
         segments = transcribe_audio(
-            audio_file,
+            audio_path,
             language,
             asr_model,
             device_name=asr_device,
@@ -118,7 +195,7 @@ def transcribe_uploaded_audio(
         )
         report("Building AI Agent context", 95)
         metadata, ai_context, plain_text = build_uploaded_audio_context(
-            audio_file,
+            audio_path,
             language,
             asr_model,
             asr_device,
@@ -192,40 +269,46 @@ def build_demo() -> Any:
         suppress_hf_warnings: bool,
         cookie_text: str,
         cookie_file: str | None,
-        progress=gr.Progress(track_tqdm=False),
-    ) -> tuple[str, str, str, str]:
-        return extract_with_progress(
-            platform,
-            url,
-            language,
-            enable_asr,
-            asr_model,
-            asr_device,
-            hf_token,
-            suppress_hf_warnings,
-            cookie_text,
-            cookie_file,
-            progress,
-        )
+    ) -> Iterator[StreamOutput]:
+        def worker(progress: ProgressCallback) -> WorkResult:
+            return extract_with_progress(
+                platform,
+                url,
+                language,
+                enable_asr,
+                asr_model,
+                asr_device,
+                hf_token,
+                suppress_hf_warnings,
+                cookie_text,
+                cookie_file,
+                ProgressAdapter(progress),
+            )
+
+        yield from stream_status(worker, "Queued video extraction")
 
     def transcribe_audio_with_progress(
         audio_file: str | None,
+        server_audio_path: str | None,
         language: str,
         asr_model: str,
         asr_device: str,
         hf_token: str,
         suppress_hf_warnings: bool,
-        progress=gr.Progress(track_tqdm=False),
-    ) -> tuple[str, str, str, str]:
-        return transcribe_uploaded_audio(
-            audio_file,
-            language,
-            asr_model,
-            asr_device,
-            hf_token,
-            suppress_hf_warnings,
-            progress,
-        )
+    ) -> Iterator[StreamOutput]:
+        def worker(progress: ProgressCallback) -> WorkResult:
+            return transcribe_uploaded_audio(
+                audio_file,
+                server_audio_path,
+                language,
+                asr_model,
+                asr_device,
+                hf_token,
+                suppress_hf_warnings,
+                ProgressAdapter(progress),
+            )
+
+        yield from stream_status(worker, "Queued audio transcription")
 
     with gr.Blocks(title="Video Subtitle Extractor") as demo:
         gr.Markdown(
@@ -262,6 +345,7 @@ def build_demo() -> Any:
 
                 run = gr.Button("Extract", variant="primary")
                 error = gr.Textbox(label="Error", interactive=False)
+                progress_status = gr.Textbox(label="Progress", lines=8, interactive=False)
                 metadata = gr.Textbox(label="Metadata", lines=8, interactive=False)
                 ai_context = gr.Textbox(label="AI Agent Context", lines=18)
                 plain_text = gr.Textbox(label="Clean Transcript", lines=12)
@@ -280,7 +364,7 @@ def build_demo() -> Any:
                         cookie_text,
                         cookie_file,
                     ],
-                    outputs=[metadata, ai_context, plain_text, error],
+                    outputs=[progress_status, metadata, ai_context, plain_text, error],
                     show_progress="full",
                 )
 
@@ -290,6 +374,10 @@ def build_demo() -> Any:
                     file_types=[".mp3", ".m4a", ".webm", ".wav", ".flac", ".ogg", ".opus", ".mp4"],
                     type="filepath",
                 )
+                server_audio_path = gr.Textbox(
+                    label="Audio file path on server",
+                    placeholder="/workspace/audio/example.mp3",
+                )
                 with gr.Row():
                     audio_language = gr.Dropdown(LANGUAGE_CHOICES, value="auto", label="ASR Language")
                     audio_model = gr.Dropdown(MODEL_CHOICES, value="base", label="faster-whisper model")
@@ -298,6 +386,7 @@ def build_demo() -> Any:
                 audio_suppress_hf_warnings = gr.Checkbox(value=True, label="Hide HuggingFace symlink warning")
                 transcribe = gr.Button("Transcribe Uploaded Audio", variant="primary")
                 audio_error = gr.Textbox(label="Error", interactive=False)
+                audio_progress_status = gr.Textbox(label="Progress", lines=8, interactive=False)
                 audio_metadata = gr.Textbox(label="Metadata", lines=8, interactive=False)
                 audio_ai_context = gr.Textbox(label="AI Agent Context", lines=18)
                 audio_plain_text = gr.Textbox(label="Clean Transcript", lines=12)
@@ -306,13 +395,14 @@ def build_demo() -> Any:
                     transcribe_audio_with_progress,
                     inputs=[
                         audio_file,
+                        server_audio_path,
                         audio_language,
                         audio_model,
                         audio_device,
                         audio_hf_token,
                         audio_suppress_hf_warnings,
                     ],
-                    outputs=[audio_metadata, audio_ai_context, audio_plain_text, audio_error],
+                    outputs=[audio_progress_status, audio_metadata, audio_ai_context, audio_plain_text, audio_error],
                     show_progress="full",
                 )
 

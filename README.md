@@ -83,6 +83,8 @@ Then upload the generated audio file in the Colab Gradio UI and choose the ASR m
 
 The local FastAPI UI also includes a `Download Audio` button next to `Extract`. It uses the same URL, platform, browser cookie, pasted cookie, and uploaded `cookies.txt` fields, then downloads the audio file directly from your local machine.
 
+On Runpod, large browser uploads can be interrupted by the proxy and show `starlette.requests.ClientDisconnect`. For large audio files, upload the file through Runpod's file tools, Jupyter file browser, `runpodctl`, `scp`, or a direct `wget` into `/workspace`, then paste that path into the Gradio `Audio file path on server` field. The Gradio UI also shows a textual `Progress` box for both the `Video URL` and `Uploaded Audio` tabs, so progress remains visible even when the platform proxy does not display Gradio's native progress indicator.
+
 ## Project Layout
 
 ```text

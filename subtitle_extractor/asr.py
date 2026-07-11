@@ -106,7 +106,7 @@ def transcribe_audio(
         model = WhisperModel(model_key, device=device, compute_type=compute_type)
         if progress:
             progress("Transcribing audio with faster-whisper", 75)
-        segments, _info = model.transcribe(
+        segments, info = model.transcribe(
             str(audio_path),
             language=language_for_asr(language),
             vad_filter=True,
@@ -114,10 +114,17 @@ def transcribe_audio(
         )
 
     result: list[Segment] = []
+    duration = float(getattr(info, "duration", 0) or 0)
+    last_reported_percent = 75
     for item in segments:
         text = item.text.strip()
         if text:
             result.append(Segment(start=float(item.start), end=float(item.end), text=text))
+        if progress and duration > 0:
+            percent = min(89, 75 + int((float(item.end) / duration) * 14))
+            if percent > last_reported_percent:
+                last_reported_percent = percent
+                progress(f"Transcribing audio with faster-whisper ({percent}%)", percent)
     if progress:
         progress("Finalizing ASR transcript", 90)
     if not result:
