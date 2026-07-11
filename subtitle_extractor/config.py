@@ -8,7 +8,7 @@ PROJECT_ROOT = PACKAGE_DIR.parent
 STATIC_DIR = PROJECT_ROOT / "static"
 
 APP_TITLE = "Video Subtitle Extractor"
-APP_VERSION = "1.7.0"
+APP_VERSION = "1.7.1"
 
 SUPPORTED_PLATFORMS = frozenset({"bilibili", "youtube"})
 SUPPORTED_BROWSERS = frozenset({"none", "chrome", "edge", "firefox"})

@@ -3,6 +3,8 @@ from __future__ import annotations
 import queue
 import threading
 import time
+import traceback
+import uuid
 from pathlib import Path
 from typing import Any, Callable, Iterator
 
@@ -24,12 +26,20 @@ WorkResult = tuple[str, str, str, str]
 ProgressCallback = Callable[[str, int], None]
 
 
+def log_event(task_id: str, message: str) -> None:
+    print(f"[subtitle-extractor][{task_id}] {message}", flush=True)
+
+
 class ProgressAdapter:
-    def __init__(self, callback: ProgressCallback) -> None:
+    def __init__(self, callback: ProgressCallback, task_id: str) -> None:
         self.callback = callback
+        self.task_id = task_id
 
     def __call__(self, value: float, desc: str | None = None) -> None:
-        self.callback(desc or "Working", int(float(value or 0) * 100))
+        message = desc or "Working"
+        percent = int(float(value or 0) * 100)
+        log_event(self.task_id, f"progress {percent}% - {message}")
+        self.callback(message, percent)
 
 
 def runtime_summary() -> str:
@@ -115,22 +125,32 @@ def resolve_audio_source(audio_file: str | None, server_audio_path: str | None) 
     return str(path)
 
 
-def stream_status(worker: Callable[[ProgressCallback], WorkResult], start_message: str) -> Iterator[StreamOutput]:
+def stream_status(worker: Callable[[ProgressCallback, str], WorkResult], start_message: str) -> Iterator[StreamOutput]:
+    task_id = uuid.uuid4().hex[:8]
     events: queue.Queue[tuple[str, int] | WorkResult] = queue.Queue()
-    status_lines = [f"0% - {start_message}"]
+    status_lines = [f"Task {task_id}", f"0% - {start_message}"]
     latest_status = "\n".join(status_lines)
     latest_payload: StreamOutput = (latest_status, "", "", "", "")
     started_at = time.monotonic()
+    last_console_heartbeat = started_at
+
+    log_event(task_id, start_message)
 
     def progress(message: str, percent: int) -> None:
         events.put((message, percent))
 
     def run_worker() -> None:
         try:
-            events.put(worker(progress))
+            log_event(task_id, "worker started")
+            result = worker(progress, task_id)
+            log_event(task_id, "worker completed")
+            events.put(result)
         except AppError as exc:
+            log_event(task_id, f"application error: {exc.message}")
             events.put(("", "", "", exc.message))
         except Exception as exc:
+            log_event(task_id, f"unexpected error: {exc}")
+            print(traceback.format_exc(), flush=True)
             events.put(("", "", "", str(exc)))
 
     thread = threading.Thread(target=run_worker, daemon=True)
@@ -141,9 +161,13 @@ def stream_status(worker: Callable[[ProgressCallback], WorkResult], start_messag
         try:
             event = events.get(timeout=1)
         except queue.Empty:
-            elapsed = int(time.monotonic() - started_at)
+            now = time.monotonic()
+            elapsed = int(now - started_at)
             heartbeat = f"{status_lines[-1]}\nRunning for {elapsed}s"
             latest_payload = (heartbeat, *latest_payload[1:])
+            if now - last_console_heartbeat >= 30:
+                log_event(task_id, f"heartbeat running for {elapsed}s; last status: {status_lines[-1]}")
+                last_console_heartbeat = now
             yield latest_payload
             continue
 
@@ -160,8 +184,10 @@ def stream_status(worker: Callable[[ProgressCallback], WorkResult], start_messag
             metadata, ai_context, plain_text, error = event
             if error:
                 status_lines.append(f"Failed - {error}")
+                log_event(task_id, f"failed: {error}")
             else:
                 status_lines.append("100% - Done")
+                log_event(task_id, "done")
             latest_status = "\n".join(status_lines[-12:])
             latest_payload = (latest_status, metadata, ai_context, plain_text, error)
             yield latest_payload
@@ -270,7 +296,7 @@ def build_demo() -> Any:
         cookie_text: str,
         cookie_file: str | None,
     ) -> Iterator[StreamOutput]:
-        def worker(progress: ProgressCallback) -> WorkResult:
+        def worker(progress: ProgressCallback, task_id: str) -> WorkResult:
             return extract_with_progress(
                 platform,
                 url,
@@ -282,7 +308,7 @@ def build_demo() -> Any:
                 suppress_hf_warnings,
                 cookie_text,
                 cookie_file,
-                ProgressAdapter(progress),
+                ProgressAdapter(progress, task_id),
             )
 
         yield from stream_status(worker, "Queued video extraction")
@@ -296,7 +322,7 @@ def build_demo() -> Any:
         hf_token: str,
         suppress_hf_warnings: bool,
     ) -> Iterator[StreamOutput]:
-        def worker(progress: ProgressCallback) -> WorkResult:
+        def worker(progress: ProgressCallback, task_id: str) -> WorkResult:
             return transcribe_uploaded_audio(
                 audio_file,
                 server_audio_path,
@@ -305,7 +331,7 @@ def build_demo() -> Any:
                 asr_device,
                 hf_token,
                 suppress_hf_warnings,
-                ProgressAdapter(progress),
+                ProgressAdapter(progress, task_id),
             )
 
         yield from stream_status(worker, "Queued audio transcription")
