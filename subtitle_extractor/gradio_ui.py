@@ -208,6 +208,25 @@ def build_demo() -> Any:
             progress,
         )
 
+    def transcribe_audio_with_progress(
+        audio_file: str | None,
+        language: str,
+        asr_model: str,
+        asr_device: str,
+        hf_token: str,
+        suppress_hf_warnings: bool,
+        progress=gr.Progress(track_tqdm=False),
+    ) -> tuple[str, str, str, str]:
+        return transcribe_uploaded_audio(
+            audio_file,
+            language,
+            asr_model,
+            asr_device,
+            hf_token,
+            suppress_hf_warnings,
+            progress,
+        )
+
     with gr.Blocks(title="Video Subtitle Extractor") as demo:
         gr.Markdown(
             "# Video Subtitle Extractor\n"
@@ -262,6 +281,7 @@ def build_demo() -> Any:
                         cookie_file,
                     ],
                     outputs=[metadata, ai_context, plain_text, error],
+                    show_progress="full",
                 )
 
             with gr.Tab("Uploaded Audio"):
@@ -283,7 +303,7 @@ def build_demo() -> Any:
                 audio_plain_text = gr.Textbox(label="Clean Transcript", lines=12)
 
                 transcribe.click(
-                    transcribe_uploaded_audio,
+                    transcribe_audio_with_progress,
                     inputs=[
                         audio_file,
                         audio_language,
@@ -293,6 +313,7 @@ def build_demo() -> Any:
                         audio_suppress_hf_warnings,
                     ],
                     outputs=[audio_metadata, audio_ai_context, audio_plain_text, audio_error],
+                    show_progress="full",
                 )
 
     return demo
