@@ -101,11 +101,23 @@ Open a Jupyter Notebook in the GPU Pod and run this single cell:
 !git clone https://github.com/lixinyiCQU/video-subtitle-extractor.git /workspace/video-subtitle-extractor
 %cd /workspace/video-subtitle-extractor
 !python -m pip install --upgrade -r requirements.txt
-!python gradio_app.py --share --server-name 0.0.0.0 --server-port 7860
+!python -u gradio_app.py --share --server-name 0.0.0.0 --server-port 7860 2>&1 | tee -a /workspace/video-subtitle-extractor-runpod.log
 ```
 
 Gradio prints a public `gradio.live` URL when startup completes. Keep the cell running while using the service. The same
-one-cell launcher is available at [runpod/launch_gradio_runpod.ipynb](runpod/launch_gradio_runpod.ipynb).
+one-cell launcher is available at [runpod/launch_gradio_runpod.ipynb](runpod/launch_gradio_runpod.ipynb). Console output
+is also appended to `/workspace/video-subtitle-extractor-runpod.log` for diagnosing Pod restarts. This path is outside
+the cloned repository, so rerunning the one-cell launcher does not delete earlier logs.
+
+To inspect the last diagnostic lines after a restart, run this in a separate Notebook cell:
+
+```python
+!tail -n 200 /workspace/video-subtitle-extractor-runpod.log
+```
+
+Resource lines report process RAM (`rss`), available system RAM, and GPU used/total memory around each model load,
+transcription, unload, and batch item. If the log ends abruptly with memory nearly exhausted and no Python traceback,
+the Pod was most likely terminated by the runtime rather than by an application exception.
 
 On Runpod, large browser uploads can be interrupted by the proxy and show `starlette.requests.ClientDisconnect`. For large audio files, upload the file through Runpod's file tools, Jupyter file browser, `runpodctl`, `scp`, or a direct `wget` into `/workspace`, then paste that path into the Gradio `Audio file path on server` field. The Gradio UI also shows a textual `Progress` box for both the `Video URL` and `Uploaded Audio` tabs, so progress remains visible even when the platform proxy does not display Gradio's native progress indicator.
 

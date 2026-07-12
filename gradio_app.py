@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import argparse
 
+from subtitle_extractor.diagnostics import log_resource_snapshot
 from subtitle_extractor.gradio_ui import build_demo
 
 
@@ -12,6 +13,8 @@ def main() -> None:
     parser.add_argument("--server-port", type=int, default=7860, help="Port to bind.")
     args = parser.parse_args()
 
+    print("[subtitle-extractor] starting Gradio service", flush=True)
+    log_resource_snapshot("application-start")
     demo = build_demo()
     demo.queue(default_concurrency_limit=1).launch(
         share=args.share,

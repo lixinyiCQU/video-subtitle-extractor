@@ -42,6 +42,9 @@ class ValidationAndTrackTests(unittest.TestCase):
         options = ydl_options(platform="youtube")
 
         self.assertTrue(options["ignore_no_formats_error"])
+        self.assertTrue(options["noplaylist"])
+        self.assertEqual(options["socket_timeout"], 45)
+        self.assertEqual(options["retries"], 8)
 
 
 if __name__ == "__main__":

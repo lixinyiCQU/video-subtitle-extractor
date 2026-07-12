@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import re
 import tempfile
 from typing import Callable
 
@@ -118,7 +119,7 @@ def extract_subtitle_context(
 def map_download_error(exc: DownloadError, platform: str):
     from .errors import AppError
 
-    message = str(exc)
+    message = re.sub(r"\x1b\[[0-9;]*m", "", str(exc))
     if platform == "bilibili" and ("HTTP Error 412" in message or "Precondition Failed" in message):
         return AppError(
             "Bilibili returned HTTP 412. Provide a logged-in cookies.txt file or browser cookies and retry.",
@@ -137,9 +138,24 @@ def map_download_error(exc: DownloadError, platform: str):
             "On Colab/cloud IPs this can still be caused by YouTube anti-bot checks even with cookies.",
             status_code=502,
         )
+    if "timed out" in message.casefold() or "timeout" in message.casefold():
+        return AppError(
+            "The media CDN timed out while downloading audio. The app retried with chunked downloads and refreshed "
+            "the media URL, but the CDN remained unreachable. Retry later or download the audio locally and upload it.",
+            status_code=504,
+        )
+    if any(
+        marker in message.casefold()
+        for marker in ("connection reset", "remote end closed", "temporarily unavailable")
+    ):
+        return AppError(
+            "The connection to the video/CDN server was interrupted after retries. Retry later or download the audio "
+            "locally and upload it for cloud transcription.",
+            status_code=502,
+        )
     if "Could not copy Chrome cookie database" in message:
         return AppError(
             "Unable to read browser cookies. Close the browser and retry, or paste the Cookie request header manually.",
             status_code=502,
         )
-    return AppError(f"yt-dlp failed to parse the video: {message}", status_code=502)
+    return AppError(f"yt-dlp failed while processing the video: {message}", status_code=502)

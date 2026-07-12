@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import gc
 import os
 import time
 from contextlib import contextmanager
@@ -7,6 +8,7 @@ from pathlib import Path
 from typing import Callable, Iterator
 
 from .config import ASR_SUPPORTED_DEVICES, ASR_SUPPORTED_MODELS, DEFAULT_ASR_DEVICE, DEFAULT_ASR_MODEL
+from .diagnostics import log_resource_snapshot
 from .errors import AppError
 from .models import Segment
 
@@ -105,51 +107,78 @@ def transcribe_audio(
     device, compute_type = resolve_asr_runtime(device_name)
     audio_path = Path(audio_path)
     log_asr(f"start audio={audio_path.name} model={model_key} device={device} compute_type={compute_type}")
-    with huggingface_environment(hf_token, suppress_hf_warnings):
+    model = None
+    segment_iterator = None
+    log_resource_snapshot("before-model-load")
+    try:
+        with huggingface_environment(hf_token, suppress_hf_warnings):
+            try:
+                from faster_whisper import WhisperModel
+            except ImportError as exc:
+                raise AppError(
+                    "ASR fallback requires faster-whisper. "
+                    "Install dependencies with: python -m pip install -r requirements.txt",
+                    status_code=500,
+                ) from exc
+
+            if progress:
+                progress(f"Loading faster-whisper model '{model_key}' on {device}", 65)
+            log_asr(f"loading model {model_key} on {device}")
+            model = WhisperModel(model_key, device=device, compute_type=compute_type)
+            log_asr("model loaded")
+            log_resource_snapshot("after-model-load")
+            if progress:
+                progress("Transcribing audio with faster-whisper", 75)
+            log_asr("transcription started")
+            segment_iterator, info = model.transcribe(
+                str(audio_path),
+                language=language_for_asr(language),
+                vad_filter=True,
+                beam_size=5,
+            )
+
+        result: list[Segment] = []
+        duration = float(getattr(info, "duration", 0) or 0)
+        log_asr(f"audio duration={duration:.2f}s")
+        last_reported_percent = 75
+        last_log_time = time.monotonic()
+        for item in segment_iterator:
+            text = item.text.strip()
+            if text:
+                result.append(Segment(start=float(item.start), end=float(item.end), text=text))
+            if progress and duration > 0:
+                percent = estimate_transcription_percent(float(item.end), duration)
+                if percent > last_reported_percent:
+                    last_reported_percent = percent
+                    progress(f"Transcribing audio with faster-whisper ({percent}%)", percent)
+            now = time.monotonic()
+            if now - last_log_time >= 30:
+                log_asr(f"transcribing segment_count={len(result)} last_end={float(item.end):.2f}s")
+                log_resource_snapshot("transcribing")
+                last_log_time = now
+        if progress:
+            progress("Finalizing ASR transcript", 90)
+        log_asr(f"transcription finished segments={len(result)}")
+        if not result:
+            raise AppError("ASR completed, but no speech segments were detected.", status_code=422)
+        return result
+    finally:
+        log_resource_snapshot("before-model-unload")
         try:
-            from faster_whisper import WhisperModel
-        except ImportError as exc:
-            raise AppError(
-                "ASR fallback requires faster-whisper. Install dependencies with: python -m pip install -r requirements.txt",
-                status_code=500,
-            ) from exc
+            backend_model = getattr(model, "model", None)
+            if backend_model is not None and hasattr(backend_model, "unload_model"):
+                backend_model.unload_model()
+                log_asr("CTranslate2 model unloaded")
+        except Exception as exc:
+            log_asr(f"model unload warning: {exc}")
+        segment_iterator = None
+        model = None
+        gc.collect()
+        try:
+            import torch
 
-        if progress:
-            progress(f"Loading faster-whisper model '{model_key}' on {device}", 65)
-        log_asr(f"loading model {model_key} on {device}")
-        model = WhisperModel(model_key, device=device, compute_type=compute_type)
-        log_asr("model loaded")
-        if progress:
-            progress("Transcribing audio with faster-whisper", 75)
-        log_asr("transcription started")
-        segments, info = model.transcribe(
-            str(audio_path),
-            language=language_for_asr(language),
-            vad_filter=True,
-            beam_size=5,
-        )
-
-    result: list[Segment] = []
-    duration = float(getattr(info, "duration", 0) or 0)
-    log_asr(f"audio duration={duration:.2f}s")
-    last_reported_percent = 75
-    last_log_time = time.monotonic()
-    for item in segments:
-        text = item.text.strip()
-        if text:
-            result.append(Segment(start=float(item.start), end=float(item.end), text=text))
-        if progress and duration > 0:
-            percent = estimate_transcription_percent(float(item.end), duration)
-            if percent > last_reported_percent:
-                last_reported_percent = percent
-                progress(f"Transcribing audio with faster-whisper ({percent}%)", percent)
-        now = time.monotonic()
-        if now - last_log_time >= 30:
-            log_asr(f"transcribing segment_count={len(result)} last_end={float(item.end):.2f}s")
-            last_log_time = now
-    if progress:
-        progress("Finalizing ASR transcript", 90)
-    log_asr(f"transcription finished segments={len(result)}")
-    if not result:
-        raise AppError("ASR completed, but no speech segments were detected.", status_code=422)
-    return result
+            if torch.cuda.is_available():
+                torch.cuda.empty_cache()
+        except Exception:
+            pass
+        log_resource_snapshot("after-model-unload")
