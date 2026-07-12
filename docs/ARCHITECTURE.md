@@ -13,7 +13,7 @@ The application is intentionally split into small, platform-aware modules while 
 - `asr.py`: Audio transcription fallback using open-source `faster-whisper`.
 - `subtitles.py`: Pure parsing and normalization logic for JSON, SRT, VTT, ASS, and TTML.
 - `formatting.py`: Output formatting for AI Agent context.
-- `exports.py`: Safe title-based filenames, metadata JSON, subtitle Markdown, and batch ZIP creation.
+- `exports.py`: Safe title-based filenames, immediate per-video persistence, atomic batch manifests, and ZIP creation.
 - `cookies.py`: Cookie upload, temporary file handling, raw header normalization, and cookie jar loading.
 - `validation.py`: Platform and URL validation.
 - `http_headers.py`: Request headers by platform.

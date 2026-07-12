@@ -152,9 +152,9 @@ def download_audio(
         "concurrent_fragment_downloads": 1,
         "continuedl": True,
         "retry_sleep_functions": {
-            "http": lambda attempt: min(2 ** max(attempt - 1, 0), 20),
-            "fragment": lambda attempt: min(2 ** max(attempt - 1, 0), 20),
-            "extractor": lambda attempt: min(attempt * 2, 10),
+            "http": lambda n: min(2 ** max(n - 1, 0), 20),
+            "fragment": lambda n: min(2 ** max(n - 1, 0), 20),
+            "extractor": lambda n: min(n * 2, 10),
         },
     }
     if cookie_path:

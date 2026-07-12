@@ -133,7 +133,10 @@ function renderBatch(batch) {
     .map((data, index) => `<option value="${index}">${escapeHtml(data.video.title || `Video ${index + 1}`)}</option>`)
     .join("");
   const failures = batch.items.filter((item) => item.status === "failed");
-  batchSummary.innerHTML = `Completed ${completedResults.length} of ${batch.total} videos.` +
+  const savedLocation = batch.outputDirectory
+    ? `<div>Saved to: ${escapeHtml(batch.outputDirectory)}</div>`
+    : "";
+  batchSummary.innerHTML = `Completed ${completedResults.length} of ${batch.total} videos.${savedLocation}` +
     failures.map((item) => `<div class="failed-item">${escapeHtml(item.url)}: ${escapeHtml(item.error)}</div>`).join("");
   downloadBatch.hidden = completedResults.length < 2;
   resultPicker.hidden = completedResults.length === 0;

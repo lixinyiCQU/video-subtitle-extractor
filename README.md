@@ -97,8 +97,7 @@ The local FastAPI UI also includes a `Download Audio` button next to `Extract`. 
 Open a Jupyter Notebook in the GPU Pod and run this single cell:
 
 ```python
-!rm -rf /workspace/video-subtitle-extractor
-!git clone https://github.com/lixinyiCQU/video-subtitle-extractor.git /workspace/video-subtitle-extractor
+!if [ -d /workspace/video-subtitle-extractor/.git ]; then git -C /workspace/video-subtitle-extractor pull --ff-only; else git clone https://github.com/lixinyiCQU/video-subtitle-extractor.git /workspace/video-subtitle-extractor; fi
 %cd /workspace/video-subtitle-extractor
 !python -m pip install --upgrade -r requirements.txt
 !python -u gradio_app.py --share --server-name 0.0.0.0 --server-port 7860 2>&1 | tee -a /workspace/video-subtitle-extractor-runpod.log
@@ -108,6 +107,12 @@ Gradio prints a public `gradio.live` URL when startup completes. Keep the cell r
 one-cell launcher is available at [runpod/launch_gradio_runpod.ipynb](runpod/launch_gradio_runpod.ipynb). Console output
 is also appended to `/workspace/video-subtitle-extractor-runpod.log` for diagnosing Pod restarts. This path is outside
 the cloned repository, so rerunning the one-cell launcher does not delete earlier logs.
+
+Every batch creates `results/<timestamp>-<id>/` inside the repository. Each completed video is written immediately as
+`<title>.metadata.json` and `<title>.subtitles.md`, while `manifest.json` is atomically updated after every item. When
+the batch finishes, `batch-results.zip` is created in the same directory. These files do not depend on the browser or
+Gradio session remaining connected. The Runpod launcher updates an existing checkout instead of deleting it, so saved
+result directories survive subsequent launches.
 
 To inspect the last diagnostic lines after a restart, run this in a separate Notebook cell:
 

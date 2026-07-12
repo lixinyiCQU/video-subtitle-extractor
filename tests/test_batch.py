@@ -1,10 +1,13 @@
 from __future__ import annotations
 
+import tempfile
 import unittest
+from pathlib import Path
 from unittest.mock import patch
 
 from subtitle_extractor.batch import extract_batch_context, parse_video_urls
 from subtitle_extractor.errors import AppError
+from subtitle_extractor.exports import BatchResultStore
 from subtitle_extractor.models import CookieInput, ExtractRequest
 
 
@@ -33,18 +36,23 @@ class BatchTests(unittest.TestCase):
                 progress("Done", 100)
             return {"video": {"title": item.url}}
 
-        with patch("subtitle_extractor.batch.extract_subtitle_context", side_effect=extract):
-            batch = extract_batch_context(
-                [request("https://a.example/1"), request("https://a.example/2")],
-                CookieInput(),
-                progress=lambda message, percent: progress.append((message, percent)),
-            )
+        with tempfile.TemporaryDirectory() as output_dir:
+            store = BatchResultStore(2, Path(output_dir) / "batch")
+            with patch("subtitle_extractor.batch.extract_subtitle_context", side_effect=extract):
+                batch = extract_batch_context(
+                    [request("https://a.example/1"), request("https://a.example/2")],
+                    CookieInput(),
+                    progress=lambda message, percent: progress.append((message, percent)),
+                    result_store=store,
+                )
 
-        self.assertEqual(batch["completed"], 1)
-        self.assertEqual(batch["failed"], 1)
-        self.assertEqual(batch["items"][0]["status"], "completed")
-        self.assertEqual(batch["items"][1]["error"], "blocked")
-        self.assertIn(("Video 1/2: Done", 50), progress)
+            self.assertEqual(batch["completed"], 1)
+            self.assertEqual(batch["failed"], 1)
+            self.assertEqual(batch["items"][0]["status"], "completed")
+            self.assertEqual(batch["items"][1]["error"], "blocked")
+            self.assertTrue((store.path / "manifest.json").exists())
+            self.assertTrue((store.path / "batch-results.zip").exists())
+            self.assertIn(("Video 1/2: Done", 50), progress)
 
 
 if __name__ == "__main__":

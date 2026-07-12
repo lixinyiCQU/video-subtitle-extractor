@@ -2,10 +2,12 @@ from __future__ import annotations
 
 import json
 import shutil
+import tempfile
 import unittest
 import zipfile
+from pathlib import Path
 
-from subtitle_extractor.exports import create_result_exports, safe_filename
+from subtitle_extractor.exports import BatchResultStore, create_result_exports, safe_filename
 
 
 def sample_result(title: str) -> dict:
@@ -55,6 +57,25 @@ class ExportTests(unittest.TestCase):
                 )
         finally:
             shutil.rmtree(artifacts[0].path.parent, ignore_errors=True)
+
+    def test_batch_store_persists_each_result_before_completion(self) -> None:
+        with tempfile.TemporaryDirectory() as output_dir:
+            store = BatchResultStore(2, Path(output_dir) / "batch")
+            files = store.record_success(1, "https://example.com/1", sample_result("Saved Video"))
+
+            manifest = json.loads((store.path / "manifest.json").read_text(encoding="utf-8"))
+            self.assertEqual(manifest["status"], "running")
+            self.assertEqual(manifest["processed"], 1)
+            self.assertTrue((store.path / files["metadata"]).exists())
+            self.assertTrue((store.path / files["subtitles"]).exists())
+
+            store.record_failure(2, "https://example.com/2", "blocked")
+            archive = store.complete()
+            final_manifest = json.loads((store.path / "manifest.json").read_text(encoding="utf-8"))
+            self.assertEqual(final_manifest["status"], "completed")
+            self.assertEqual(final_manifest["failed"], 1)
+            self.assertIsNotNone(archive)
+            self.assertTrue(archive.exists())
 
 
 if __name__ == "__main__":

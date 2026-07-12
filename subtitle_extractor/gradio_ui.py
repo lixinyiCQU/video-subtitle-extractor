@@ -148,7 +148,8 @@ def extract_batch_with_progress(
         batch = extract_batch_context(requests, cookie_input, progress=progress)
         items = batch["items"]
         failures = [f"{item['url']}: {item['error']}" for item in items if item["status"] == "failed"]
-        return items, "\n".join(failures)
+        messages = [f"Results saved to: {batch['outputDirectory']}", *failures]
+        return items, "\n".join(messages)
     finally:
         cookie_input.cleanup()
 

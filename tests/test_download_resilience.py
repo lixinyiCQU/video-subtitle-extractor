@@ -79,6 +79,7 @@ class DownloadResilienceTests(unittest.TestCase):
         self.assertEqual(path.name, "video.m4a")
         self.assertEqual(FakeYoutubeDL.options[0]["http_chunk_size"], 512 * 1024)
         self.assertEqual(FakeYoutubeDL.options[0]["socket_timeout"], 45)
+        self.assertEqual(FakeYoutubeDL.options[0]["retry_sleep_functions"]["http"](n=2), 2)
 
     def test_timeout_error_is_clean_and_specific(self) -> None:
         error = DownloadError("\x1b[0;31mERROR:\x1b[0m Read timed out")
