@@ -33,15 +33,35 @@ def ensure_supported_url(url: str, platform: str) -> str:
     if parsed.scheme not in {"http", "https"}:
         raise AppError("Please enter a full http(s) video URL.")
 
-    host = parsed.netloc.lower()
+    host = (parsed.hostname or "").lower()
     if platform == "bilibili":
-        allowed = host.endswith("bilibili.com") or host.endswith("bilibili.tv") or host == "b23.tv"
+        allowed = _host_matches(host, "bilibili.com") or _host_matches(host, "bilibili.tv") or host == "b23.tv"
         if not allowed:
             raise AppError("The selected platform is Bilibili. Please enter a bilibili.com, bilibili.tv, or b23.tv URL.")
     elif platform == "youtube":
-        allowed = host.endswith("youtube.com") or host.endswith("youtu.be") or host.endswith("youtube-nocookie.com")
+        allowed = any(_host_matches(host, domain) for domain in ("youtube.com", "youtu.be", "youtube-nocookie.com"))
         if not allowed:
             raise AppError("The selected platform is YouTube. Please enter a youtube.com or youtu.be URL.")
     else:
         raise AppError("Unsupported platform.")
     return value
+
+
+def detect_platform(url: str) -> str:
+    value = url.strip()
+    parsed = urlparse(value)
+    if parsed.scheme not in {"http", "https"}:
+        raise AppError("Please enter a full http(s) video URL.")
+    host = (parsed.hostname or "").lower()
+    if _host_matches(host, "bilibili.com") or _host_matches(host, "bilibili.tv") or host == "b23.tv":
+        return "bilibili"
+    if any(_host_matches(host, domain) for domain in ("youtube.com", "youtu.be", "youtube-nocookie.com")):
+        return "youtube"
+    raise AppError(
+        f"Unsupported video URL host '{host or 'unknown'}'. Supported platforms are Bilibili and YouTube.",
+        status_code=422,
+    )
+
+
+def _host_matches(host: str, domain: str) -> bool:
+    return host == domain or host.endswith(f".{domain}")

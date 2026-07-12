@@ -29,7 +29,7 @@ from .exports import create_result_exports
 from .jobs import create_batch_extract_job, create_extract_job, get_job, job_to_dict
 from .models import ExtractRequest
 from .service import extract_subtitle_context, map_download_error
-from .validation import browser_cookie_spec, ensure_supported_url, normalize_platform
+from .validation import browser_cookie_spec, detect_platform, ensure_supported_url, normalize_platform
 from .ytdlp_client import download_audio
 
 
@@ -128,54 +128,70 @@ def create_app() -> FastAPI:
     @application.post("/api/extract/batch/start")
     async def start_batch_extract_job(
         urls: str = Form(...),
-        platform: str = Form(DEFAULT_PLATFORM),
         language: str = Form(DEFAULT_LANGUAGE),
-        browser: str = Form(DEFAULT_BROWSER),
         enable_asr: bool = Form(DEFAULT_ENABLE_ASR),
         asr_model: str = Form(DEFAULT_ASR_MODEL),
         asr_device: str = Form(DEFAULT_ASR_DEVICE),
         hf_token: str | None = Form(None),
         suppress_hf_warnings: bool = Form(DEFAULT_SUPPRESS_HF_WARNINGS),
-        cookie_text: str | None = Form(None),
-        cookie_file: UploadFile | None = File(None),
+        bilibili_browser: str = Form(DEFAULT_BROWSER),
+        bilibili_cookie_text: str | None = Form(None),
+        bilibili_cookie_file: UploadFile | None = File(None),
+        youtube_browser: str = Form(DEFAULT_BROWSER),
+        youtube_cookie_text: str | None = Form(None),
+        youtube_cookie_file: UploadFile | None = File(None),
     ) -> dict:
         try:
             video_urls = parse_video_urls(urls)
+            detected_urls = [(url, detect_platform(url)) for url in video_urls]
         except AppError as exc:
             raise HTTPException(status_code=exc.status_code, detail=exc.message) from exc
-        cookie_input = prepare_cookie_input(cookie_text, cookie_file)
+        cookie_inputs = {
+            "bilibili": prepare_cookie_input(bilibili_cookie_text, bilibili_cookie_file),
+            "youtube": prepare_cookie_input(youtube_cookie_text, youtube_cookie_file),
+        }
+        browsers = {"bilibili": bilibili_browser, "youtube": youtube_browser}
+        cookie_texts = {"bilibili": bilibili_cookie_text, "youtube": youtube_cookie_text}
         requests = [
             ExtractRequest(
                 url=url,
                 platform=platform,
                 language=language,
-                browser=browser,
+                browser=browsers[platform],
                 enable_asr=enable_asr,
                 asr_model=asr_model,
                 asr_device=asr_device,
                 hf_token=hf_token,
                 suppress_hf_warnings=suppress_hf_warnings,
-                cookie_text=cookie_text,
+                cookie_text=cookie_texts[platform],
             )
-            for url in video_urls
+            for url, platform in detected_urls
         ]
-        job = create_batch_extract_job(requests, cookie_input)
+        job = create_batch_extract_job(requests, cookie_inputs)
         return job_to_dict(job)
 
     @application.post("/api/audio/download")
     async def download_audio_file(
         url: str = Form(...),
-        platform: str = Form(DEFAULT_PLATFORM),
-        browser: str = Form(DEFAULT_BROWSER),
-        cookie_text: str | None = Form(None),
-        cookie_file: UploadFile | None = File(None),
+        bilibili_browser: str = Form(DEFAULT_BROWSER),
+        bilibili_cookie_text: str | None = Form(None),
+        bilibili_cookie_file: UploadFile | None = File(None),
+        youtube_browser: str = Form(DEFAULT_BROWSER),
+        youtube_cookie_text: str | None = Form(None),
+        youtube_cookie_file: UploadFile | None = File(None),
     ) -> FileResponse:
-        cookie_input = prepare_cookie_input(cookie_text, cookie_file)
+        cookie_inputs = {
+            "bilibili": prepare_cookie_input(bilibili_cookie_text, bilibili_cookie_file),
+            "youtube": prepare_cookie_input(youtube_cookie_text, youtube_cookie_file),
+        }
         temp_dir = tempfile.mkdtemp(prefix="subtitle-audio-download-")
+        normalized_platform = "bilibili"
         try:
-            normalized_platform = normalize_platform(platform)
+            normalized_platform = detect_platform(url)
             video_url = ensure_supported_url(url, normalized_platform)
+            browser = bilibili_browser if normalized_platform == "bilibili" else youtube_browser
             browser_cookies = browser_cookie_spec(browser)
+            cookie_input = cookie_inputs[normalized_platform]
             audio_path = download_audio(
                 video_url,
                 normalized_platform,
@@ -198,7 +214,8 @@ def create_app() -> FastAPI:
             mapped = map_download_error(exc, normalized_platform)
             raise HTTPException(status_code=mapped.status_code, detail=mapped.message) from exc
         finally:
-            cookie_input.cleanup()
+            for cookie_input in cookie_inputs.values():
+                cookie_input.cleanup()
 
     @application.get("/api/jobs/{job_id}")
     def read_job(job_id: str) -> dict:

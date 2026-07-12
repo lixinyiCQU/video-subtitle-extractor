@@ -3,7 +3,7 @@ from __future__ import annotations
 import unittest
 
 from subtitle_extractor.errors import AppError
-from subtitle_extractor.validation import ensure_supported_url, normalize_platform
+from subtitle_extractor.validation import detect_platform, ensure_supported_url, normalize_platform
 from subtitle_extractor.ytdlp_client import choose_track, collect_tracks, ydl_options
 
 
@@ -20,6 +20,15 @@ class ValidationAndTrackTests(unittest.TestCase):
         )
         with self.assertRaises(AppError):
             ensure_supported_url("https://www.youtube.com/watch?v=abc", "bilibili")
+
+    def test_platform_is_detected_from_url(self) -> None:
+        self.assertEqual(detect_platform("https://www.bilibili.com/video/BV1abc"), "bilibili")
+        self.assertEqual(detect_platform("https://b23.tv/example"), "bilibili")
+        self.assertEqual(detect_platform("https://www.youtube.com/watch?v=abc"), "youtube")
+        self.assertEqual(detect_platform("https://youtu.be/abc"), "youtube")
+        self.assertEqual(detect_platform("https://www.youtube.com:443/watch?v=abc"), "youtube")
+        with self.assertRaises(AppError):
+            detect_platform("https://fakeyoutube.com/watch?v=abc")
 
     def test_collect_tracks_filters_danmaku_and_prefers_chinese(self) -> None:
         info = {

@@ -18,17 +18,9 @@
         </header>
 
         <form class="extractor" id="extractForm">
-          <label class="field platform-field">
-            <span>Platform</span>
-            <select id="platform" name="platform">
-              <option value="bilibili">Bilibili</option>
-              <option value="youtube">YouTube</option>
-            </select>
-          </label>
-
           <label class="field url-field">
             <span>Video URLs (one per line)</span>
-            <textarea id="videoUrls" name="urls" rows="4" placeholder="https://www.bilibili.com/video/BV..." autocomplete="off" required></textarea>
+            <textarea id="videoUrls" name="urls" rows="4" placeholder="https://www.bilibili.com/video/BV...&#10;https://www.youtube.com/watch?v=..." autocomplete="off" required></textarea>
           </label>
 
           <label class="field compact-field">
@@ -106,25 +98,48 @@
           </section>
 
           <details class="cookie-box">
-            <summary>Provide cookies for restricted, logged-in, age-gated, YouTube bot-check, or anti-bot-blocked videos</summary>
-            <div class="cookie-grid">
-              <label class="field">
-                <span>Read from browser</span>
-                <select id="browser" name="browser">
-                  <option value="none">Do not read</option>
-                  <option value="edge">Microsoft Edge</option>
-                  <option value="chrome">Google Chrome</option>
-                  <option value="firefox">Firefox</option>
-                </select>
-              </label>
-              <label class="field">
-                <span>Paste Cookie header or cookies.txt</span>
-                <textarea id="cookieText" name="cookie_text" rows="6" placeholder="Cookie: SESSDATA=...; bili_jct=...&#10;Cookie: VISITOR_INFO1_LIVE=...; SID=...&#10;&#10;Or paste Netscape cookies.txt content"></textarea>
-              </label>
-              <label class="field file-field">
-                <span>Upload cookies.txt</span>
-                <input id="cookieFile" name="cookie_file" type="file" accept=".txt" />
-              </label>
+            <summary>Platform cookies for restricted, logged-in, age-gated, or anti-bot-blocked videos</summary>
+            <div class="platform-cookie-grid">
+              <fieldset class="cookie-platform">
+                <legend>Bilibili Cookies</legend>
+                <label class="field">
+                  <span>Read from browser</span>
+                  <select name="bilibili_browser">
+                    <option value="none">Do not read</option>
+                    <option value="edge">Microsoft Edge</option>
+                    <option value="chrome">Google Chrome</option>
+                    <option value="firefox">Firefox</option>
+                  </select>
+                </label>
+                <label class="field">
+                  <span>Paste Cookie header or cookies.txt</span>
+                  <textarea name="bilibili_cookie_text" rows="6" placeholder="Cookie: SESSDATA=...; bili_jct=..."></textarea>
+                </label>
+                <label class="field file-field">
+                  <span>Upload cookies.txt</span>
+                  <input name="bilibili_cookie_file" type="file" accept=".txt" />
+                </label>
+              </fieldset>
+              <fieldset class="cookie-platform">
+                <legend>YouTube Cookies</legend>
+                <label class="field">
+                  <span>Read from browser</span>
+                  <select name="youtube_browser">
+                    <option value="none">Do not read</option>
+                    <option value="edge">Microsoft Edge</option>
+                    <option value="chrome">Google Chrome</option>
+                    <option value="firefox">Firefox</option>
+                  </select>
+                </label>
+                <label class="field">
+                  <span>Paste Cookie header or cookies.txt</span>
+                  <textarea name="youtube_cookie_text" rows="6" placeholder="Cookie: SID=...; SAPISID=..."></textarea>
+                </label>
+                <label class="field file-field">
+                  <span>Upload cookies.txt</span>
+                  <input name="youtube_cookie_file" type="file" accept=".txt" />
+                </label>
+              </fieldset>
             </div>
           </details>
         </form>

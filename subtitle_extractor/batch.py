@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import time
 import traceback
+from collections.abc import Mapping
 from typing import Any, Callable
 
 from .diagnostics import log_resource_snapshot
@@ -25,7 +26,7 @@ def parse_video_urls(raw: str, limit: int = 50) -> list[str]:
 
 def extract_batch_context(
     requests: list[ExtractRequest],
-    cookie_input: CookieInput,
+    cookie_inputs: CookieInput | Mapping[str, CookieInput],
     progress: BatchProgressCallback | None = None,
     result_store: BatchResultStore | None = None,
 ) -> dict[str, Any]:
@@ -41,7 +42,8 @@ def extract_batch_context(
         item_number = index + 1
         started_at = time.monotonic()
         print(
-            f"[subtitle-extractor][batch] video-start item={item_number}/{total} url={request.url}",
+            f"[subtitle-extractor][batch] video-start item={item_number}/{total} "
+            f"platform={request.platform} url={request.url}",
             flush=True,
         )
         log_resource_snapshot(f"video-{item_number}-start")
@@ -53,6 +55,11 @@ def extract_batch_context(
 
         report("Starting extraction", 0)
         try:
+            cookie_input = (
+                cookie_inputs
+                if isinstance(cookie_inputs, CookieInput)
+                else cookie_inputs.get(request.platform, CookieInput())
+            )
             result = extract_subtitle_context(request, cookie_input, progress=report)
             saved_files = result_store.record_success(item_number, request.url, result)
             items.append(

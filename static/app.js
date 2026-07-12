@@ -1,5 +1,4 @@
 const form = document.querySelector("#extractForm");
-const platformSelect = document.querySelector("#platform");
 const videoUrls = document.querySelector("#videoUrls");
 const enableAsr = document.querySelector("#enableAsr");
 const enableAsrValue = document.querySelector("#enableAsrValue");
@@ -54,14 +53,6 @@ function formatDuration(seconds) {
 
 function platformLabel(platform) {
   return platform === "youtube" ? "YouTube" : "Bilibili";
-}
-
-function updatePlatformHints() {
-  if (platformSelect.value === "youtube") {
-    videoUrls.placeholder = "https://www.youtube.com/watch?v=...\nhttps://www.youtube.com/watch?v=...";
-  } else {
-    videoUrls.placeholder = "https://www.bilibili.com/video/BV...\nhttps://www.bilibili.com/video/BV...";
-  }
 }
 
 function setProgress(message, percent) {
@@ -145,7 +136,6 @@ function renderBatch(batch) {
   renderSelectedResult();
 }
 
-platformSelect.addEventListener("change", updatePlatformHints);
 resultSelect.addEventListener("change", renderSelectedResult);
 enableAsr.addEventListener("change", () => {
   enableAsrValue.value = enableAsr.checked ? "true" : "false";
@@ -153,8 +143,6 @@ enableAsr.addEventListener("change", () => {
 suppressHfWarnings.addEventListener("change", () => {
   suppressHfWarningsValue.value = suppressHfWarnings.checked ? "true" : "false";
 });
-updatePlatformHints();
-
 form.addEventListener("submit", async (event) => {
   event.preventDefault();
   setStatus("Parsing", "loading");
@@ -227,7 +215,7 @@ downloadAudio.addEventListener("click", async () => {
     const blob = await response.blob();
     const disposition = response.headers.get("content-disposition") || "";
     const match = disposition.match(/filename\*?=(?:UTF-8''|\"?)([^\";]+)/i);
-    const fallbackName = `${platformSelect.value || "video"}-audio`;
+    const fallbackName = "video-audio";
     const filename = match ? decodeURIComponent(match[1].replaceAll('"', "")) : fallbackName;
     const url = URL.createObjectURL(blob);
     const anchor = document.createElement("a");

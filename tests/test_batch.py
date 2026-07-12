@@ -54,6 +54,28 @@ class BatchTests(unittest.TestCase):
             self.assertTrue((store.path / "batch-results.zip").exists())
             self.assertIn(("Video 1/2: Done", 50), progress)
 
+    def test_mixed_platform_batch_uses_matching_cookie_input(self) -> None:
+        seen: list[tuple[str, str | None]] = []
+
+        def extract(item: ExtractRequest, cookies: CookieInput, progress=None) -> dict:
+            seen.append((item.platform, cookies.header))
+            return {"platform": item.platform, "video": {"title": item.platform}}
+
+        requests = [
+            ExtractRequest("https://www.bilibili.com/video/BV1", "bilibili", "auto", "none"),
+            ExtractRequest("https://www.youtube.com/watch?v=abc", "youtube", "auto", "none"),
+        ]
+        cookies = {
+            "bilibili": CookieInput(header="SESSDATA=bili"),
+            "youtube": CookieInput(header="SID=youtube"),
+        }
+        with tempfile.TemporaryDirectory() as output_dir:
+            store = BatchResultStore(2, Path(output_dir) / "batch")
+            with patch("subtitle_extractor.batch.extract_subtitle_context", side_effect=extract):
+                extract_batch_context(requests, cookies, result_store=store)
+
+        self.assertEqual(seen, [("bilibili", "SESSDATA=bili"), ("youtube", "SID=youtube")])
+
 
 if __name__ == "__main__":
     unittest.main()

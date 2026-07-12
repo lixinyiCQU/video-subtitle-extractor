@@ -16,9 +16,9 @@ from .exports import create_result_exports
 from .formatting import compact_transcript
 from .models import CookieInput, ExtractRequest, Segment
 from .subtitles import format_ts
+from .validation import detect_platform
 
 
-PLATFORM_CHOICES = ["bilibili", "youtube"]
 LANGUAGE_CHOICES = ["auto", "zh-Hans", "zh-Hant", "zh", "en", "ja"]
 MODEL_CHOICES = ["tiny", "base", "small", "medium", "large-v3"]
 DEVICE_CHOICES = ["auto", "cuda", "cpu"]
@@ -115,7 +115,6 @@ def export_gradio_batch(items: list[dict[str, Any]] | None) -> tuple[list[str], 
 
 
 def extract_batch_with_progress(
-    platform: str,
     urls_text: str,
     language: str,
     enable_asr: bool,
@@ -123,13 +122,20 @@ def extract_batch_with_progress(
     asr_device: str,
     hf_token: str,
     suppress_hf_warnings: bool,
-    cookie_text: str,
-    cookie_file: str | None,
+    bilibili_cookie_text: str,
+    bilibili_cookie_file: str | None,
+    youtube_cookie_text: str,
+    youtube_cookie_file: str | None,
     progress: ProgressCallback | None = None,
 ) -> tuple[list[dict[str, Any]], str]:
     urls = parse_video_urls(urls_text)
-    cookie_input = build_cookie_input(cookie_text, cookie_file)
+    cookie_inputs = {
+        "bilibili": build_cookie_input(bilibili_cookie_text, bilibili_cookie_file),
+        "youtube": build_cookie_input(youtube_cookie_text, youtube_cookie_file),
+    }
+    cookie_texts = {"bilibili": bilibili_cookie_text, "youtube": youtube_cookie_text}
     try:
+        detected_urls = [(url, detect_platform(url)) for url in urls]
         requests = [
             ExtractRequest(
                 url=url,
@@ -141,17 +147,18 @@ def extract_batch_with_progress(
                 asr_device=asr_device,
                 hf_token=hf_token.strip() or None,
                 suppress_hf_warnings=suppress_hf_warnings,
-                cookie_text=cookie_text,
+                cookie_text=cookie_texts[platform],
             )
-            for url in urls
+            for url, platform in detected_urls
         ]
-        batch = extract_batch_context(requests, cookie_input, progress=progress)
+        batch = extract_batch_context(requests, cookie_inputs, progress=progress)
         items = batch["items"]
         failures = [f"{item['url']}: {item['error']}" for item in items if item["status"] == "failed"]
         messages = [f"Results saved to: {batch['outputDirectory']}", *failures]
         return items, "\n".join(messages)
     finally:
-        cookie_input.cleanup()
+        for cookie_input in cookie_inputs.values():
+            cookie_input.cleanup()
 
 
 def build_uploaded_audio_context(
@@ -319,7 +326,6 @@ def build_demo() -> Any:
         raise AppError("Gradio UI requires gradio. Install dependencies with: python -m pip install -r requirements.txt") from exc
 
     def run_with_progress(
-        platform: str,
         urls_text: str,
         language: str,
         enable_asr: bool,
@@ -327,8 +333,10 @@ def build_demo() -> Any:
         asr_device: str,
         hf_token: str,
         suppress_hf_warnings: bool,
-        cookie_text: str,
-        cookie_file: str | None,
+        bilibili_cookie_text: str,
+        bilibili_cookie_file: str | None,
+        youtube_cookie_text: str,
+        youtube_cookie_file: str | None,
     ) -> Iterator[tuple[Any, ...]]:
         task_id = uuid.uuid4().hex[:8]
         events: queue.Queue[tuple[Any, ...]] = queue.Queue()
@@ -341,7 +349,6 @@ def build_demo() -> Any:
         def worker() -> None:
             try:
                 items, batch_error = extract_batch_with_progress(
-                    platform,
                     urls_text,
                     language,
                     enable_asr,
@@ -349,8 +356,10 @@ def build_demo() -> Any:
                     asr_device,
                     hf_token,
                     suppress_hf_warnings,
-                    cookie_text,
-                    cookie_file,
+                    bilibili_cookie_text,
+                    bilibili_cookie_file,
+                    youtube_cookie_text,
+                    youtube_cookie_file,
                     progress,
                 )
                 events.put(("done", items, batch_error))
@@ -434,13 +443,11 @@ def build_demo() -> Any:
 
         with gr.Tabs():
             with gr.Tab("Video URL"):
-                with gr.Row():
-                    platform = gr.Dropdown(PLATFORM_CHOICES, value="bilibili", label="Platform")
-                    language = gr.Dropdown(LANGUAGE_CHOICES, value="auto", label="Subtitle / ASR Language")
+                language = gr.Dropdown(LANGUAGE_CHOICES, value="auto", label="Subtitle / ASR Language")
                 url = gr.Textbox(
                     label="Video URLs (one per line, up to 50)",
                     lines=5,
-                    placeholder="https://www.bilibili.com/video/BV...\nhttps://www.bilibili.com/video/BV...",
+                    placeholder="https://www.bilibili.com/video/BV...\nhttps://www.youtube.com/watch?v=...",
                 )
 
                 with gr.Accordion("ASR fallback", open=True):
@@ -452,12 +459,31 @@ def build_demo() -> Any:
                     suppress_hf_warnings = gr.Checkbox(value=True, label="Hide HuggingFace symlink warning")
 
                 with gr.Accordion("Cookies", open=False):
-                    cookie_text = gr.Textbox(
-                        label="Paste raw Cookie header or Netscape cookies.txt",
-                        lines=6,
-                        placeholder="Cookie: SID=...; SAPISID=...\n\nor paste Netscape cookies.txt content",
-                    )
-                    cookie_file = gr.File(label="Upload cookies.txt", file_types=[".txt"], type="filepath")
+                    with gr.Row():
+                        with gr.Column():
+                            gr.Markdown("### Bilibili Cookies")
+                            bilibili_cookie_text = gr.Textbox(
+                                label="Paste Bilibili Cookie header or cookies.txt",
+                                lines=6,
+                                placeholder="Cookie: SESSDATA=...; bili_jct=...",
+                            )
+                            bilibili_cookie_file = gr.File(
+                                label="Upload Bilibili cookies.txt",
+                                file_types=[".txt"],
+                                type="filepath",
+                            )
+                        with gr.Column():
+                            gr.Markdown("### YouTube Cookies")
+                            youtube_cookie_text = gr.Textbox(
+                                label="Paste YouTube Cookie header or cookies.txt",
+                                lines=6,
+                                placeholder="Cookie: SID=...; SAPISID=...",
+                            )
+                            youtube_cookie_file = gr.File(
+                                label="Upload YouTube cookies.txt",
+                                file_types=[".txt"],
+                                type="filepath",
+                            )
 
                 run = gr.Button("Extract Batch", variant="primary")
                 error = gr.Textbox(label="Batch Messages / Errors", interactive=False)
@@ -474,7 +500,6 @@ def build_demo() -> Any:
                 run.click(
                     run_with_progress,
                     inputs=[
-                        platform,
                         url,
                         language,
                         enable_asr,
@@ -482,8 +507,10 @@ def build_demo() -> Any:
                         asr_device,
                         hf_token,
                         suppress_hf_warnings,
-                        cookie_text,
-                        cookie_file,
+                        bilibili_cookie_text,
+                        bilibili_cookie_file,
+                        youtube_cookie_text,
+                        youtube_cookie_file,
                     ],
                     outputs=[progress_status, result_selector, batch_state, metadata, ai_context, plain_text, error],
                     show_progress="full",

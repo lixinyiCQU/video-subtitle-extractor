@@ -3,16 +3,50 @@ from __future__ import annotations
 import tempfile
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 
 from subtitle_extractor.gradio_ui import (
     batch_result_choices,
     build_cookie_input,
+    extract_batch_with_progress,
     parse_video_urls,
     view_batch_result,
 )
 
 
 class GradioUiTests(unittest.TestCase):
+    def test_mixed_platform_inputs_build_separate_cookie_sources(self) -> None:
+        captured: dict = {}
+
+        def extract(requests, cookie_inputs, progress=None):
+            captured["requests"] = requests
+            captured["cookies"] = cookie_inputs
+            return {"items": [], "outputDirectory": "/tmp/results"}
+
+        with patch("subtitle_extractor.gradio_ui.extract_batch_context", side_effect=extract):
+            items, message = extract_batch_with_progress(
+                "https://www.bilibili.com/video/BV1\nhttps://youtu.be/abc",
+                "auto",
+                False,
+                "base",
+                "cpu",
+                "",
+                True,
+                "SESSDATA=bili",
+                None,
+                "SID=youtube",
+                None,
+            )
+
+        self.assertEqual(items, [])
+        self.assertIn("/tmp/results", message)
+        self.assertEqual(
+            [request.platform for request in captured["requests"]],
+            ["bilibili", "youtube"],
+        )
+        self.assertEqual(captured["cookies"]["bilibili"].header, "SESSDATA=bili")
+        self.assertEqual(captured["cookies"]["youtube"].header, "SID=youtube")
+
     def test_batch_urls_support_lines_and_commas(self) -> None:
         self.assertEqual(
             parse_video_urls("https://a.example/1\nhttps://a.example/2, https://a.example/3"),

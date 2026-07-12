@@ -115,7 +115,7 @@ h2 {
 
 .extractor {
   display: grid;
-  grid-template-columns: minmax(132px, 170px) minmax(260px, 1fr) minmax(150px, 190px) minmax(260px, 320px);
+  grid-template-columns: minmax(320px, 1fr) minmax(150px, 190px) minmax(260px, 320px);
   gap: 12px;
   padding: 14px;
   align-items: end;
@@ -327,11 +327,32 @@ textarea:focus {
   font-weight: 700;
 }
 
-.cookie-grid {
+.platform-cookie-grid {
   display: grid;
-  grid-template-columns: minmax(180px, 240px) minmax(220px, 1fr) minmax(180px, 260px);
+  grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 12px;
   margin-top: 12px;
+}
+
+.cookie-platform {
+  min-width: 0;
+  display: grid;
+  grid-template-columns: minmax(160px, 220px) minmax(220px, 1fr);
+  gap: 12px;
+  border: 0;
+  border-top: 2px solid var(--line);
+  padding: 12px 0 0;
+}
+
+.cookie-platform legend {
+  padding: 0 10px 0 0;
+  color: var(--accent-dark);
+  font-size: 13px;
+  font-weight: 800;
+}
+
+.cookie-platform .file-field {
+  grid-column: 1 / -1;
 }
 
 .file-field {
@@ -489,7 +510,8 @@ dd {
   .extractor,
   .asr-box,
   .hf-config,
-  .cookie-grid,
+  .platform-cookie-grid,
+  .cookie-platform,
   .result-grid,
   .result-picker {
     grid-template-columns: 1fr;

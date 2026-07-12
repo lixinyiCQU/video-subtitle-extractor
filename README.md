@@ -6,11 +6,11 @@ The backend uses `yt-dlp` for open-source video metadata and subtitle extraction
 
 ## Features
 
-- Platform switcher for Bilibili and YouTube
+- Automatic Bilibili/YouTube detection for mixed-platform URL batches
 - Official and automatic subtitle support
 - Automatic ASR fallback with open-source `faster-whisper` when no subtitle track exists
 - Language preference selection
-- Cookie support through browser cookies, raw `Cookie:` headers, or Netscape `cookies.txt`
+- Separate Bilibili and YouTube cookies in the same batch through browser cookies, raw headers, or `cookies.txt`
 - Subtitle cleanup, deduplication, and timestamp normalization
 - Markdown output designed for AI Agent context
 - Batch extraction for up to 50 video URLs with per-video result selection
@@ -30,7 +30,8 @@ Open:
 http://127.0.0.1:8000
 ```
 
-Paste one video URL per line. A batch continues when an individual video fails, and the result selector switches
+Paste one Bilibili or YouTube URL per line in any order. The app detects each platform automatically and selects its
+matching cookie input. A batch continues when an individual video fails, and the result selector switches
 between completed videos without re-running extraction. Use `Metadata JSON` or `Subtitle .md` for the selected video;
 when multiple videos complete, `Download ZIP` contains both files for every successful video.
 
@@ -90,7 +91,8 @@ python -m yt_dlp -x --audio-format mp3 --cookies www.youtube.com_cookies.txt -o 
 
 Then upload the generated audio file in the Colab Gradio UI and choose the ASR model/device. This avoids YouTube access from Colab entirely; Colab only receives the audio file you upload and runs faster-whisper transcription.
 
-The local FastAPI UI also includes a `Download Audio` button next to `Extract`. It uses the same URL, platform, browser cookie, pasted cookie, and uploaded `cookies.txt` fields, then downloads the audio file directly from your local machine.
+The local FastAPI UI also includes a `Download Audio` button next to `Extract`. It detects the first URL's platform,
+selects the matching browser/pasted/uploaded cookie input, and downloads the audio directly from your local machine.
 
 ## Runpod GPU Mode
 
@@ -166,6 +168,9 @@ Supported cookie inputs:
 - Read cookies from Edge, Chrome, or Firefox
 - Paste a raw `Cookie: ...` request header
 - Upload a Netscape-format `cookies.txt`
+
+The batch UI provides independent Bilibili and YouTube cookie sections. Both can be populated at the same time; cookies
+are routed only to URLs detected for their platform.
 
 Cookies are only written to a temporary file for the current request. Do not commit real cookies to version control.
 

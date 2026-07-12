@@ -37,14 +37,14 @@ def create_extract_job(request: ExtractRequest, cookie_input: CookieInput) -> Jo
     return job
 
 
-def create_batch_extract_job(requests: list[ExtractRequest], cookie_input: CookieInput) -> JobState:
+def create_batch_extract_job(requests: list[ExtractRequest], cookie_inputs: dict[str, CookieInput]) -> JobState:
     if not requests:
         raise AppError("Provide at least one video URL.", status_code=422)
     job = JobState(id=uuid.uuid4().hex, message=f"Queued {len(requests)} videos")
     with _lock:
         _jobs[job.id] = job
 
-    thread = threading.Thread(target=_run_batch_job, args=(job.id, requests, cookie_input), daemon=True)
+    thread = threading.Thread(target=_run_batch_job, args=(job.id, requests, cookie_inputs), daemon=True)
     thread.start()
     return job
 
@@ -106,12 +106,12 @@ def _run_job(job_id: str, request: ExtractRequest, cookie_input: CookieInput) ->
         cookie_input.cleanup()
 
 
-def _run_batch_job(job_id: str, requests: list[ExtractRequest], cookie_input: CookieInput) -> None:
+def _run_batch_job(job_id: str, requests: list[ExtractRequest], cookie_inputs: dict[str, CookieInput]) -> None:
     try:
         def progress(message: str, percent: int) -> None:
             _update(job_id, status="running", message=message, percent=percent)
 
-        result = extract_batch_context(requests, cookie_input, progress=progress)
+        result = extract_batch_context(requests, cookie_inputs, progress=progress)
         with _lock:
             job = _jobs[job_id]
             job.status = "completed"
@@ -125,4 +125,5 @@ def _run_batch_job(job_id: str, requests: list[ExtractRequest], cookie_input: Co
             job.message = str(exc)
             job.error = str(exc)
     finally:
-        cookie_input.cleanup()
+        for cookie_input in cookie_inputs.values():
+            cookie_input.cleanup()

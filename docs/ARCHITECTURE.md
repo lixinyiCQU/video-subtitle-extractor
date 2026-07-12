@@ -28,7 +28,8 @@ To add a new platform:
 4. Add filtering or track preference logic in `ytdlp_client.py` only if the generic logic is not enough.
 5. Add one or more tests in `tests/`.
 
-The frontend sends a generic `platform` field, so additional platforms can share the same endpoint.
+The batch frontend sends URLs without a platform field. `detect_platform` validates each hostname, and the batch layer
+routes the matching platform-specific `CookieInput`. Legacy single-video endpoints still accept an explicit platform.
 
 ## UI Entrypoints
 
