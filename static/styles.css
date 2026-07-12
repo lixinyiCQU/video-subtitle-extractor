@@ -126,6 +126,14 @@ h2 {
   gap: 8px;
 }
 
+.url-field {
+  min-width: 0;
+}
+
+.url-field textarea {
+  min-height: 92px;
+}
+
 .field span {
   color: var(--muted);
   font-size: 13px;
@@ -336,6 +344,30 @@ textarea:focus {
   gap: 18px;
 }
 
+.result-picker {
+  display: grid;
+  grid-template-columns: minmax(260px, 520px) minmax(220px, 1fr);
+  gap: 16px;
+  align-items: end;
+  border-block: 1px solid var(--line);
+  padding: 14px 0;
+}
+
+.batch-summary {
+  color: var(--muted);
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.batch-summary .failed-item {
+  color: #b3261e;
+  overflow-wrap: anywhere;
+}
+
+.export-batch {
+  padding: 0 14px;
+}
+
 .panel {
   min-width: 0;
   overflow: hidden;
@@ -458,7 +490,8 @@ dd {
   .asr-box,
   .hf-config,
   .cookie-grid,
-  .result-grid {
+  .result-grid,
+  .result-picker {
     grid-template-columns: 1fr;
   }
 

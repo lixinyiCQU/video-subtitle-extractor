@@ -13,6 +13,8 @@ The backend uses `yt-dlp` for open-source video metadata and subtitle extraction
 - Cookie support through browser cookies, raw `Cookie:` headers, or Netscape `cookies.txt`
 - Subtitle cleanup, deduplication, and timestamp normalization
 - Markdown output designed for AI Agent context
+- Batch extraction for up to 50 video URLs with per-video result selection
+- Title-based metadata JSON and subtitle Markdown exports, packaged as ZIP for batches
 - Gradio cloud UI for Google Colab or other GPU runtimes
 
 ## Local FastAPI UI
@@ -27,6 +29,10 @@ Open:
 ```text
 http://127.0.0.1:8000
 ```
+
+Paste one video URL per line. A batch continues when an individual video fails, and the result selector switches
+between completed videos without re-running extraction. Use `Metadata JSON` or `Subtitle .md` for the selected video;
+when multiple videos complete, `Download ZIP` contains both files for every successful video.
 
 ## Gradio UI
 
@@ -54,6 +60,9 @@ In Colab, choose `Runtime > Change runtime type > GPU`, then run:
 ```
 
 Gradio will print a public URL. Open that URL and use the UI entirely in the cloud runtime.
+
+The Gradio `Video URL` tab accepts the same one-URL-per-line batch input. Select a completed title to view its output.
+The export control returns two title-based files for one video, or one ZIP archive for multiple videos.
 
 Colab preinstalls several Google packages. The project intentionally uses modern FastAPI/Starlette-compatible dependency ranges, so `--upgrade` is recommended to let pip converge on versions that work with Colab's preinstalled `google-adk`, `google-genai`, and Gradio packages.
 
@@ -83,6 +92,30 @@ Then upload the generated audio file in the Colab Gradio UI and choose the ASR m
 
 The local FastAPI UI also includes a `Download Audio` button next to `Extract`. It uses the same URL, platform, browser cookie, pasted cookie, and uploaded `cookies.txt` fields, then downloads the audio file directly from your local machine.
 
+## Runpod GPU Mode
+
+Create a GPU Pod from an official PyTorch/Jupyter template. In the Pod configuration, expose `7860` as an HTTP
+port in addition to the Jupyter port. Keep the volume mounted at `/workspace` so the repository and HuggingFace cache
+survive Pod restarts. The ready-to-run notebook is [runpod/launch_gradio_runpod.ipynb](runpod/launch_gradio_runpod.ipynb).
+
+The notebook clones or updates the repository, installs FFmpeg and Python dependencies, stores HuggingFace models in
+`/workspace/hf-cache`, enables Gradio password authentication, prints the Runpod proxy URL, and starts the service on
+`0.0.0.0:7860`. Do not add `--share`; Runpod already provides the HTTPS proxy.
+
+After launch, open:
+
+```text
+https://<POD_ID>-7860.proxy.runpod.net
+```
+
+Optional authentication is also available outside Runpod:
+
+```powershell
+$env:GRADIO_AUTH_USERNAME = "admin"
+$env:GRADIO_AUTH_PASSWORD = "replace-with-a-strong-password"
+python gradio_app.py --server-name 0.0.0.0 --server-port 7860
+```
+
 On Runpod, large browser uploads can be interrupted by the proxy and show `starlette.requests.ClientDisconnect`. For large audio files, upload the file through Runpod's file tools, Jupyter file browser, `runpodctl`, `scp`, or a direct `wget` into `/workspace`, then paste that path into the Gradio `Audio file path on server` field. The Gradio UI also shows a textual `Progress` box for both the `Video URL` and `Uploaded Audio` tabs, so progress remains visible even when the platform proxy does not display Gradio's native progress indicator.
 
 ## Project Layout
@@ -92,12 +125,15 @@ On Runpod, large browser uploads can be interrupted by the proxy and show `starl
 |-- app.py                         # Compatibility ASGI entrypoint
 |-- gradio_app.py                  # Gradio cloud UI entrypoint
 |-- colab/                         # Colab launcher notebook
+|-- runpod/                        # Runpod Jupyter launcher notebook
 |-- subtitle_extractor/            # Backend application package
 |   |-- web.py                     # FastAPI app and HTTP routes
 |   |-- service.py                 # Use-case orchestration
+|   |-- batch.py                   # Shared batch parsing, progress, and partial-failure handling
 |   |-- ytdlp_client.py            # yt-dlp integration and subtitle track selection
 |   |-- subtitles.py               # Subtitle parsers and cleanup
 |   |-- formatting.py              # AI context formatting
+|   |-- exports.py                 # Metadata/subtitle files and ZIP packaging
 |   |-- cookies.py                 # Cookie file/header handling
 |   |-- validation.py              # Platform, browser, and URL validation
 |   |-- http_headers.py            # Per-platform request headers
@@ -153,7 +189,9 @@ On Windows, HuggingFace may also warn that symlink-based caching is unavailable.
 
 ### Progress UI
 
-ASR can be slow. The frontend now starts an extraction job with `/api/extract/start` and polls `/api/jobs/{job_id}` for progress. The legacy synchronous `/api/extract` endpoint is still available for compatibility.
+ASR can be slow. The frontend starts a batch extraction job with `/api/extract/batch/start` and polls
+`/api/jobs/{job_id}` for progress. Batch processing is sequential to avoid competing ASR workloads on one CPU/GPU.
+The legacy synchronous `/api/extract` and single-job `/api/extract/start` endpoints remain available for compatibility.
 
 ## Tests
 

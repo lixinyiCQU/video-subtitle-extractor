@@ -27,8 +27,8 @@
           </label>
 
           <label class="field url-field">
-            <span>Video URL</span>
-            <input id="videoUrl" name="url" type="url" placeholder="https://www.bilibili.com/video/BV..." autocomplete="off" required />
+            <span>Video URLs (one per line)</span>
+            <textarea id="videoUrls" name="urls" rows="4" placeholder="https://www.bilibili.com/video/BV..." autocomplete="off" required></textarea>
           </label>
 
           <label class="field compact-field">
@@ -46,7 +46,7 @@
           <div class="command-row">
             <button class="primary" type="submit">
               <span class="button-icon">v</span>
-              Extract
+              Extract Batch
             </button>
             <button class="ghost" type="button" id="downloadAudio">
               Download Audio
@@ -129,6 +129,14 @@
           </details>
         </form>
 
+        <section class="result-picker" id="resultPicker" hidden>
+          <label class="field">
+            <span>View Video Subtitle</span>
+            <select id="resultSelect"></select>
+          </label>
+          <div class="batch-summary" id="batchSummary"></div>
+        </section>
+
         <section class="result-grid" id="results" hidden>
           <div class="panel output-panel">
             <div class="panel-head">
@@ -138,7 +146,9 @@
               </div>
               <div class="actions">
                 <button class="ghost" type="button" data-copy="contextOutput">Copy</button>
-                <button class="ghost" type="button" id="downloadMarkdown">Download .md</button>
+                <button class="ghost" type="button" id="downloadMetadata">Metadata JSON</button>
+                <button class="ghost" type="button" id="downloadSubtitle">Subtitle .md</button>
+                <button class="primary export-batch" type="button" id="downloadBatch" hidden>Download ZIP</button>
               </div>
             </div>
             <textarea id="contextOutput" spellcheck="false"></textarea>

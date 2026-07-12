@@ -7,11 +7,13 @@ The application is intentionally split into small, platform-aware modules while 
 - `web.py`: FastAPI construction, route definitions, multipart form handling, and error mapping.
 - `gradio_ui.py`: Cloud-friendly Gradio interface for Colab and GPU servers.
 - `service.py`: Application use case. It validates inputs, invokes extraction, parses subtitles, and shapes the response.
+- `batch.py`: Shared sequential batch orchestration, overall progress mapping, and partial-failure handling.
 - `jobs.py`: In-memory background job runner used by the frontend progress UI.
 - `ytdlp_client.py`: Integration boundary for `yt-dlp`, including subtitle track collection and preference rules.
 - `asr.py`: Audio transcription fallback using open-source `faster-whisper`.
 - `subtitles.py`: Pure parsing and normalization logic for JSON, SRT, VTT, ASS, and TTML.
 - `formatting.py`: Output formatting for AI Agent context.
+- `exports.py`: Safe title-based filenames, metadata JSON, subtitle Markdown, and batch ZIP creation.
 - `cookies.py`: Cookie upload, temporary file handling, raw header normalization, and cookie jar loading.
 - `validation.py`: Platform and URL validation.
 - `http_headers.py`: Request headers by platform.
@@ -48,10 +50,11 @@ For YouTube, `ytdlp_client.py` enables Node.js as a JavaScript runtime and allow
 
 ## Progress Flow
 
-The synchronous `/api/extract` endpoint remains available. The browser uses the background job flow:
+The synchronous `/api/extract` endpoint remains available. The browser uses the background batch job flow:
 
-1. `POST /api/extract/start` creates an in-memory job and starts a daemon worker thread.
-2. The worker reports coarse progress stages such as metadata, subtitle parsing, audio download, model loading, and transcription.
+1. `POST /api/extract/batch/start` creates an in-memory job and starts a daemon worker thread.
+2. The worker processes URLs sequentially, preserves successful results when another item fails, and maps each video's progress to overall batch progress.
 3. The frontend polls `GET /api/jobs/{job_id}` until the job is completed or failed.
+4. `GET /api/jobs/{job_id}/export` creates selected title-based files or a ZIP for all completed batch items.
 
 This is intentionally simple for local desktop use. For multi-user deployment, replace `jobs.py` with a persistent queue such as Redis Queue, Celery, Dramatiq, or a database-backed task table.

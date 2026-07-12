@@ -9,11 +9,12 @@ from pathlib import Path
 from typing import Any, Callable, Iterator
 
 from .asr import transcribe_audio
+from .batch import extract_batch_context, parse_video_urls
 from .cookies import prepare_cookie_text
 from .errors import AppError
+from .exports import create_result_exports
 from .formatting import compact_transcript
 from .models import CookieInput, ExtractRequest, Segment
-from .service import extract_subtitle_context
 from .subtitles import format_ts
 
 
@@ -75,6 +76,81 @@ def format_metadata(data: dict[str, Any]) -> str:
         f"Track: {track.get('source')} / {track.get('language')} / {track.get('ext')}\n"
         f"Segments: {len(data.get('segments') or [])}"
     )
+
+
+def completed_batch_results(items: list[dict[str, Any]] | None) -> list[dict[str, Any]]:
+    return [
+        item["result"]
+        for item in (items or [])
+        if item.get("status") == "completed" and item.get("result")
+    ]
+
+
+def batch_result_choices(items: list[dict[str, Any]] | None) -> list[tuple[str, str]]:
+    return [
+        ((result.get("video") or {}).get("title") or f"Video {index + 1}", str(index))
+        for index, result in enumerate(completed_batch_results(items))
+    ]
+
+
+def view_batch_result(selection: str | int | None, items: list[dict[str, Any]] | None) -> tuple[str, str, str]:
+    results = completed_batch_results(items)
+    if not results:
+        return "", "", ""
+    try:
+        index = int(selection or 0)
+    except (TypeError, ValueError):
+        index = 0
+    index = max(0, min(index, len(results) - 1))
+    result = results[index]
+    return format_metadata(result), result["aiContext"], result["plainText"]
+
+
+def export_gradio_batch(items: list[dict[str, Any]] | None) -> tuple[list[str], str]:
+    results = completed_batch_results(items)
+    if not results:
+        return [], "No completed video result is available for export."
+    artifacts = create_result_exports(results)
+    return [str(artifact.path) for artifact in artifacts], ""
+
+
+def extract_batch_with_progress(
+    platform: str,
+    urls_text: str,
+    language: str,
+    enable_asr: bool,
+    asr_model: str,
+    asr_device: str,
+    hf_token: str,
+    suppress_hf_warnings: bool,
+    cookie_text: str,
+    cookie_file: str | None,
+    progress: ProgressCallback | None = None,
+) -> tuple[list[dict[str, Any]], str]:
+    urls = parse_video_urls(urls_text)
+    cookie_input = build_cookie_input(cookie_text, cookie_file)
+    try:
+        requests = [
+            ExtractRequest(
+                url=url,
+                platform=platform,
+                language=language,
+                browser="none",
+                enable_asr=enable_asr,
+                asr_model=asr_model,
+                asr_device=asr_device,
+                hf_token=hf_token.strip() or None,
+                suppress_hf_warnings=suppress_hf_warnings,
+                cookie_text=cookie_text,
+            )
+            for url in urls
+        ]
+        batch = extract_batch_context(requests, cookie_input, progress=progress)
+        items = batch["items"]
+        failures = [f"{item['url']}: {item['error']}" for item in items if item["status"] == "failed"]
+        return items, "\n".join(failures)
+    finally:
+        cookie_input.cleanup()
 
 
 def build_uploaded_audio_context(
@@ -235,49 +311,6 @@ def transcribe_uploaded_audio(
         return "", "", "", str(exc)
 
 
-def extract_with_progress(
-    platform: str,
-    url: str,
-    language: str,
-    enable_asr: bool,
-    asr_model: str,
-    asr_device: str,
-    hf_token: str,
-    suppress_hf_warnings: bool,
-    cookie_text: str,
-    cookie_file: str | None,
-    progress: Any = None,
-) -> tuple[str, str, str, str]:
-    cookie_input = build_cookie_input(cookie_text, cookie_file)
-    request = ExtractRequest(
-        url=url,
-        platform=platform,
-        language=language,
-        browser="none",
-        enable_asr=enable_asr,
-        asr_model=asr_model,
-        asr_device=asr_device,
-        hf_token=hf_token.strip() or None,
-        suppress_hf_warnings=suppress_hf_warnings,
-        cookie_text=cookie_text,
-    )
-
-    def report(message: str, percent: int) -> None:
-        if progress:
-            progress(percent / 100, desc=message)
-
-    try:
-        data = extract_subtitle_context(request, cookie_input, progress=report)
-        metadata = format_metadata(data)
-        return metadata, data["aiContext"], data["plainText"], ""
-    except AppError as exc:
-        return "", "", "", exc.message
-    except Exception as exc:
-        return "", "", "", str(exc)
-    finally:
-        cookie_input.cleanup()
-
-
 def build_demo() -> Any:
     try:
         import gradio as gr
@@ -286,7 +319,7 @@ def build_demo() -> Any:
 
     def run_with_progress(
         platform: str,
-        url: str,
+        urls_text: str,
         language: str,
         enable_asr: bool,
         asr_model: str,
@@ -295,23 +328,78 @@ def build_demo() -> Any:
         suppress_hf_warnings: bool,
         cookie_text: str,
         cookie_file: str | None,
-    ) -> Iterator[StreamOutput]:
-        def worker(progress: ProgressCallback, task_id: str) -> WorkResult:
-            return extract_with_progress(
-                platform,
-                url,
-                language,
-                enable_asr,
-                asr_model,
-                asr_device,
-                hf_token,
-                suppress_hf_warnings,
-                cookie_text,
-                cookie_file,
-                ProgressAdapter(progress, task_id),
-            )
+    ) -> Iterator[tuple[Any, ...]]:
+        task_id = uuid.uuid4().hex[:8]
+        events: queue.Queue[tuple[Any, ...]] = queue.Queue()
+        status_lines = [f"Task {task_id}", "0% - Queued batch extraction"]
+        empty_selector = gr.Dropdown(label="View Video Subtitle", choices=[], value=None, interactive=False)
 
-        yield from stream_status(worker, "Queued video extraction")
+        def progress(message: str, percent: int) -> None:
+            events.put(("progress", message, percent))
+
+        def worker() -> None:
+            try:
+                items, batch_error = extract_batch_with_progress(
+                    platform,
+                    urls_text,
+                    language,
+                    enable_asr,
+                    asr_model,
+                    asr_device,
+                    hf_token,
+                    suppress_hf_warnings,
+                    cookie_text,
+                    cookie_file,
+                    progress,
+                )
+                events.put(("done", items, batch_error))
+            except AppError as exc:
+                events.put(("failed", exc.message))
+            except Exception as exc:
+                print(traceback.format_exc(), flush=True)
+                events.put(("failed", str(exc)))
+
+        thread = threading.Thread(target=worker, daemon=True)
+        thread.start()
+        yield "\n".join(status_lines), empty_selector, [], "", "", "", ""
+        while thread.is_alive() or not events.empty():
+            try:
+                event = events.get(timeout=1)
+            except queue.Empty:
+                yield "\n".join(status_lines[-12:]), empty_selector, [], "", "", "", ""
+                continue
+            if event[0] == "progress":
+                _, message, percent = event
+                status_lines.append(f"{percent}% - {message}")
+                yield "\n".join(status_lines[-12:]), empty_selector, [], "", "", "", ""
+                continue
+            if event[0] == "failed":
+                error_message = event[1]
+                status_lines.append(f"Failed - {error_message}")
+                yield "\n".join(status_lines[-12:]), empty_selector, [], "", "", "", error_message
+                continue
+
+            _, items, batch_error = event
+            choices = batch_result_choices(items)
+            selected = choices[0][1] if choices else None
+            selector_update = gr.Dropdown(
+                label="View Video Subtitle",
+                choices=choices,
+                value=selected,
+                interactive=bool(choices),
+            )
+            metadata_value, context_value, plain_value = view_batch_result(selected, items)
+            completed = len(completed_batch_results(items))
+            status_lines.append(f"100% - Completed {completed}/{len(items)} videos")
+            yield (
+                "\n".join(status_lines[-12:]),
+                selector_update,
+                items,
+                metadata_value,
+                context_value,
+                plain_value,
+                batch_error,
+            )
 
     def transcribe_audio_with_progress(
         audio_file: str | None,
@@ -349,8 +437,9 @@ def build_demo() -> Any:
                     platform = gr.Dropdown(PLATFORM_CHOICES, value="bilibili", label="Platform")
                     language = gr.Dropdown(LANGUAGE_CHOICES, value="auto", label="Subtitle / ASR Language")
                 url = gr.Textbox(
-                    label="Video URL",
-                    placeholder="https://www.bilibili.com/video/BV... or https://www.youtube.com/watch?v=...",
+                    label="Video URLs (one per line, up to 50)",
+                    lines=5,
+                    placeholder="https://www.bilibili.com/video/BV...\nhttps://www.bilibili.com/video/BV...",
                 )
 
                 with gr.Accordion("ASR fallback", open=True):
@@ -369,12 +458,17 @@ def build_demo() -> Any:
                     )
                     cookie_file = gr.File(label="Upload cookies.txt", file_types=[".txt"], type="filepath")
 
-                run = gr.Button("Extract", variant="primary")
-                error = gr.Textbox(label="Error", interactive=False)
+                run = gr.Button("Extract Batch", variant="primary")
+                error = gr.Textbox(label="Batch Messages / Errors", interactive=False)
                 progress_status = gr.Textbox(label="Progress", lines=8, interactive=False)
+                result_selector = gr.Dropdown(label="View Video Subtitle", choices=[], interactive=False)
+                batch_state = gr.State([])
                 metadata = gr.Textbox(label="Metadata", lines=8, interactive=False)
                 ai_context = gr.Textbox(label="AI Agent Context", lines=18)
                 plain_text = gr.Textbox(label="Clean Transcript", lines=12)
+                export = gr.Button("Export Metadata and Subtitles")
+                export_files = gr.File(label="Export Files", file_count="multiple", interactive=False)
+                export_error = gr.Textbox(label="Export Error", interactive=False)
 
                 run.click(
                     run_with_progress,
@@ -390,7 +484,19 @@ def build_demo() -> Any:
                         cookie_text,
                         cookie_file,
                     ],
-                    outputs=[progress_status, metadata, ai_context, plain_text, error],
+                    outputs=[progress_status, result_selector, batch_state, metadata, ai_context, plain_text, error],
+                    show_progress="full",
+                )
+                result_selector.input(
+                    view_batch_result,
+                    inputs=[result_selector, batch_state],
+                    outputs=[metadata, ai_context, plain_text],
+                    show_progress="hidden",
+                )
+                export.click(
+                    export_gradio_batch,
+                    inputs=[batch_state],
+                    outputs=[export_files, export_error],
                     show_progress="full",
                 )
 

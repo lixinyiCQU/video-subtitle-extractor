@@ -4,10 +4,46 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from subtitle_extractor.gradio_ui import build_cookie_input
+from subtitle_extractor.gradio_ui import (
+    batch_result_choices,
+    build_cookie_input,
+    parse_video_urls,
+    view_batch_result,
+)
 
 
 class GradioUiTests(unittest.TestCase):
+    def test_batch_urls_support_lines_and_commas(self) -> None:
+        self.assertEqual(
+            parse_video_urls("https://a.example/1\nhttps://a.example/2, https://a.example/3"),
+            [
+                "https://a.example/1",
+                "https://a.example/2",
+                "https://a.example/3",
+            ],
+        )
+
+    def test_batch_selector_only_contains_completed_results(self) -> None:
+        result = {
+            "platform": "youtube",
+            "extractionMethod": "subtitle",
+            "video": {"title": "Successful video"},
+            "selectedTrack": {},
+            "segments": [],
+            "aiContext": "context",
+            "plainText": "plain",
+        }
+        items = [
+            {"status": "failed", "error": "blocked", "result": None},
+            {"status": "completed", "error": None, "result": result},
+        ]
+
+        self.assertEqual(batch_result_choices(items), [("Successful video", "0")])
+        metadata, context, plain = view_batch_result("0", items)
+        self.assertIn("Successful video", metadata)
+        self.assertEqual(context, "context")
+        self.assertEqual(plain, "plain")
+
     def test_raw_cookie_header_is_not_written_to_file(self) -> None:
         cookie_input = build_cookie_input("Cookie: SID=abc; X=1", None)
 
