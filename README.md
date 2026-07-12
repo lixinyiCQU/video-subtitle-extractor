@@ -94,27 +94,18 @@ The local FastAPI UI also includes a `Download Audio` button next to `Extract`. 
 
 ## Runpod GPU Mode
 
-Create a GPU Pod from an official PyTorch/Jupyter template. In the Pod configuration, expose `7860` as an HTTP
-port in addition to the Jupyter port. Keep the volume mounted at `/workspace` so the repository and HuggingFace cache
-survive Pod restarts. The ready-to-run notebook is [runpod/launch_gradio_runpod.ipynb](runpod/launch_gradio_runpod.ipynb).
+Open a Jupyter Notebook in the GPU Pod and run this single cell:
 
-The notebook clones or updates the repository, installs FFmpeg and Python dependencies, stores HuggingFace models in
-`/workspace/hf-cache`, enables Gradio password authentication, prints the Runpod proxy URL, and starts the service on
-`0.0.0.0:7860`. Do not add `--share`; Runpod already provides the HTTPS proxy.
-
-After launch, open:
-
-```text
-https://<POD_ID>-7860.proxy.runpod.net
+```python
+!rm -rf /workspace/video-subtitle-extractor
+!git clone https://github.com/lixinyiCQU/video-subtitle-extractor.git /workspace/video-subtitle-extractor
+%cd /workspace/video-subtitle-extractor
+!python -m pip install --upgrade -r requirements.txt
+!python gradio_app.py --share --server-name 0.0.0.0 --server-port 7860
 ```
 
-Optional authentication is also available outside Runpod:
-
-```powershell
-$env:GRADIO_AUTH_USERNAME = "admin"
-$env:GRADIO_AUTH_PASSWORD = "replace-with-a-strong-password"
-python gradio_app.py --server-name 0.0.0.0 --server-port 7860
-```
+Gradio prints a public `gradio.live` URL when startup completes. Keep the cell running while using the service. The same
+one-cell launcher is available at [runpod/launch_gradio_runpod.ipynb](runpod/launch_gradio_runpod.ipynb).
 
 On Runpod, large browser uploads can be interrupted by the proxy and show `starlette.requests.ClientDisconnect`. For large audio files, upload the file through Runpod's file tools, Jupyter file browser, `runpodctl`, `scp`, or a direct `wget` into `/workspace`, then paste that path into the Gradio `Audio file path on server` field. The Gradio UI also shows a textual `Progress` box for both the `Video URL` and `Uploaded Audio` tabs, so progress remains visible even when the platform proxy does not display Gradio's native progress indicator.
 
